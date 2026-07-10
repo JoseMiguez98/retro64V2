@@ -15,3 +15,7 @@ body {
 main {
   text-align: center;
 }
+
+#emulator-canvas {
+  image-rendering: pixelated;
+}

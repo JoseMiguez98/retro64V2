@@ -36,7 +36,7 @@ app.innerHTML = `
       <p id="status">${
         romPath ? "Ready." : "Set VITE_ROM_PATH in packages/web/.env.local, then reload."
       }</p>
-      <canvas id="emulator-canvas"></canvas>
+      <canvas id="emulator-canvas" style="display: block; width: min(90vw, 640px); aspect-ratio: 4 / 3;"></canvas>
     </section>
   </main>
 `;
@@ -47,6 +47,10 @@ const loadButton = document.querySelector<HTMLButtonElement>("#load")!;
 const pauseButton = document.querySelector<HTMLButtonElement>("#pause")!;
 const resumeButton = document.querySelector<HTMLButtonElement>("#resume")!;
 const stopButton = document.querySelector<HTMLButtonElement>("#stop")!;
+// Nostalgist/Emscripten renames the canvas element's id (to "canvas") once the
+// emulator launches, so a later re-lookup by the original "#emulator-canvas"
+// selector fails on relaunch. Capture the element once and reuse the reference.
+const canvasEl = document.querySelector<HTMLCanvasElement>("#emulator-canvas")!;
 
 if (defaultConsoleId) consoleSelect.value = defaultConsoleId;
 
@@ -77,7 +81,7 @@ async function loadRom(): Promise<void> {
     await engine.launch({
       consoleId: consoleSelect.value,
       rom: romPath,
-      element: "#emulator-canvas",
+      element: canvasEl,
     });
     statusEl.textContent = "Running.";
     setControlsForStatus("running");
