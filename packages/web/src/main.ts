@@ -36,7 +36,7 @@ app.innerHTML = `
       <p id="status">${
         romPath ? "Ready." : "Set VITE_ROM_PATH in packages/web/.env.local, then reload."
       }</p>
-      <canvas id="emulator-canvas"></canvas>
+      <canvas id="emulator-canvas" style="display: block; width: min(90vw, 640px); aspect-ratio: 4 / 3;"></canvas>
     </section>
   </main>
 `;
