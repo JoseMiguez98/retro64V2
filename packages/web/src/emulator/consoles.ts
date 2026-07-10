@@ -21,19 +21,32 @@ export const SUPPORTED_CONSOLES: readonly ConsoleDefinition[] = [
     core: "genesis_plus_gx",
     extensions: [".md", ".gen", ".bin"],
   },
+  { id: "gb", label: "Game Boy / Game Boy Color", core: "mgba", extensions: [".gb", ".gbc"] },
   { id: "gba", label: "Game Boy Advance", core: "mgba", extensions: [".gba"] },
-  { id: "n64", label: "Nintendo 64", core: "mupen64plus_next", extensions: [".n64", ".z64"] },
+  { id: "n64", label: "Nintendo 64", core: "mupen64plus_next", extensions: [".n64", ".z64", ".v64"] },
   {
     id: "ps1",
     label: "PlayStation",
     core: "mednafen_psx_hw",
     bios: ["scph5501.bin"],
-    extensions: [".bin", ".cue", ".img"],
+    extensions: [".bin", ".cue", ".img", ".iso"],
   },
 ];
 
+// Nostalgist/libretro cores accept zipped ROMs directly (they detect and
+// decompress the archive themselves), so .zip is valid for every console
+// regardless of its native extensions.
+const ARCHIVE_EXTENSIONS: readonly string[] = [".zip"];
+
 export function findConsole(id: string): ConsoleDefinition | undefined {
   return SUPPORTED_CONSOLES.find((console) => console.id === id);
+}
+
+/** Extensions accepted for a console's ROM upload, including the .zip archive format. */
+export function acceptedExtensions(consoleId: string): readonly string[] {
+  const definition = findConsole(consoleId);
+  if (!definition) return ARCHIVE_EXTENSIONS;
+  return [...definition.extensions, ...ARCHIVE_EXTENSIONS];
 }
 
 /** Extension (with dot) of a filename, lowercased. Empty string if there isn't one. */
@@ -45,5 +58,5 @@ function fileExtension(fileName: string): string {
 export function isRomExtensionSupported(fileName: string, consoleId: string): boolean {
   const definition = findConsole(consoleId);
   if (!definition) return false;
-  return definition.extensions.includes(fileExtension(fileName));
+  return acceptedExtensions(consoleId).includes(fileExtension(fileName));
 }

@@ -1,5 +1,5 @@
 import { PROTOCOL_VERSION } from "@retro64/shared";
-import { isRomExtensionSupported, SUPPORTED_CONSOLES } from "./emulator/consoles";
+import { acceptedExtensions, isRomExtensionSupported, SUPPORTED_CONSOLES } from "./emulator/consoles";
 import { EmulatorEngine } from "./emulator/engine";
 import "./style.css";
 
@@ -28,7 +28,7 @@ app.innerHTML = `
         ).join("")}
       </select>
       <label for="rom-input">ROM file</label>
-      <input type="file" id="rom-input" accept="${SUPPORTED_CONSOLES.flatMap((console) => console.extensions).join(",")}" />
+      <input type="file" id="rom-input" accept="${[...new Set(SUPPORTED_CONSOLES.flatMap((console) => acceptedExtensions(console.id)))].join(",")}" />
       <div id="controls">
         <button id="load" disabled>Load ROM</button>
         <button id="pause" disabled>Pause</button>
@@ -85,9 +85,9 @@ stopButton.addEventListener("click", () => {
 function validateSelectedRom(file: File): void {
   if (!isRomExtensionSupported(file.name, consoleSelect.value)) {
     selectedRom = undefined;
-    statusEl.textContent = `Unsupported file for the selected console. Expected: ${
-      SUPPORTED_CONSOLES.find((console) => console.id === consoleSelect.value)?.extensions.join(", ") ?? ""
-    }.`;
+    statusEl.textContent = `Unsupported file for the selected console. Expected: ${acceptedExtensions(
+      consoleSelect.value,
+    ).join(", ")}.`;
     setControlsForStatus("idle");
     return;
   }
