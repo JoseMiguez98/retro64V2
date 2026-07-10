@@ -38,6 +38,12 @@ pnpm dev:signaling # Socket.io server on :3001 (health: /health)
 
 Other scripts: `pnpm build`, `pnpm typecheck` (run across all packages).
 
+## Emulator engine
+
+The engine decision is [`docs/decisions/DMI-3-emulation-engine.md`](./docs/decisions/DMI-3-emulation-engine.md);
+its real integration into `packages/web` (and how to add a new console) is
+[`docs/emulator-engine.md`](./docs/emulator-engine.md).
+
 ## Agentic workflow
 
 This repo is built by an agentic loop, one ticket per session. See [`AGENTS.md`](./AGENTS.md) for the protocol and [`.claude/skills/git-flow/`](./.claude/skills/git-flow/) for the mechanics.

@@ -12,7 +12,6 @@ export default defineConfig({
       input: {
         main: resolveFromHere("index.html"),
         "poc-p2p": resolveFromHere("poc-p2p.html"),
-        "poc-emulator": resolveFromHere("poc-emulator.html"),
       },
     },
   },
