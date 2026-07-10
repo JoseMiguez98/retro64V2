@@ -12,3 +12,21 @@ export type RoomCode = string;
 
 /** Opaque per-connection peer identifier assigned by the signaling server. */
 export type PeerId = string;
+
+// --- DMI-2 POC only ---------------------------------------------------
+// Minimal pairing + SDP/ICE relay used by the P2P transport POC
+// (packages/web/src/poc/p2p.ts). NOT the real room/signaling protocol —
+// that's DMI-19/20/21. Keep this block small and delete it once the real
+// protocol supersedes it.
+
+export interface PocPaired {
+  initiator: boolean;
+}
+
+// `data` is opaque JSON here (SDP/ICE payloads) — shared has no DOM lib since
+// it's also consumed by the Node signaling server. The web side casts to
+// RTCSessionDescriptionInit / RTCIceCandidateInit where it constructs these.
+export type PocSignal =
+  | { type: "offer"; data: unknown }
+  | { type: "answer"; data: unknown }
+  | { type: "ice-candidate"; data: unknown };
