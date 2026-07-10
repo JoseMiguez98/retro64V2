@@ -20,7 +20,7 @@ if (app) {
           : "Set VITE_ROM_PATH and VITE_ROM_CORE in packages/web/.env.local, then reload."
       }</p>
       <button id="load" ${romPath && coreId ? "" : "disabled"}>Load ROM</button>
-      <canvas id="emulator-canvas"></canvas>
+      <canvas id="emulator-canvas" style="display: block; width: min(90vw, 640px); aspect-ratio: 4 / 3;"></canvas>
     </main>
   `;
 }
