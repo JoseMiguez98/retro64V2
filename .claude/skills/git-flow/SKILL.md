@@ -40,6 +40,7 @@ feature/DMI-XXX-<short-kebab-slug>
 ```
 
 - Prefix always `feature/` for now (single stage — dev only). Once staging/prod land, we'll add `hotfix/`, `release/`.
+- Fixing a bug in a ticket that's **already merged**? That's not a `feature/` branch — see §7.5.
 - `DMI-XXX` = Linear ID, uppercase.
 - Slug = 3–6 words, lowercase, kebab-case, derived from the ticket title. Strip filler words ("de", "la", "the"). Keep it under ~60 chars total.
 
@@ -209,6 +210,19 @@ Because each ticket lives in its own worktree with its own branch, two agents wo
 - **Linear:** each agent writes to a different `DMI-XXX`, so no conflict.
 - **GitHub PRs:** each agent opens a distinct PR against `main`. Merge conflicts happen on the human side, not during agent execution.
 - **`.claude/settings.local.json`:** git-ignored and per-machine; irrelevant.
+
+### 7.5 Bug found in an already-merged ticket
+
+A ticket's PR merged, `main` moved on (possibly through several more tickets), and later you find a bug in that shipped work. Do **not** touch the old ticket's branch or commits.
+
+- **Never** check out the old `feature/DMI-XXX-slug` branch to add fix commits to it — it's already merged; pushing there means force-pushing or re-merging already-shipped history, which rewrites what others have pulled and reviewed.
+- **Never** rebase/amend/force-push anything that's landed on `main`.
+- **Do** branch a fresh `fix/DMI-XXX-<short-kebab-slug>` off current `main` — `fix/`, not `feature/` (this isn't new work) and not `hotfix/` (that prefix is reserved for a future staging/prod pipeline, per §2).
+- Commit with a normal conventional-commit message, footer `Refs DMI-XXX` pointing at the original ticket.
+- Open a normal PR against `main` per §4. In the `## Linear` section, note the bug was found in the already-shipped ticket rather than claiming to close it.
+- **Don't reopen the Linear ticket or change its state** — it's Done and stays Done. This is new work referencing old work, not a resumption of it. If the bug is big enough to need its own tracking/visibility, create a new Linear ticket linked to the original instead of reusing its ID.
+
+This was decided after a canvas-sizing bug surfaced in the already-merged DMI-3 POC: `fix/DMI-3-canvas-css-size`, PR #10.
 
 ---
 
