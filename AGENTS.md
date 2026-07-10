@@ -65,11 +65,20 @@ If unsure, default to Sonnet 5 and escalate to Opus if the ticket turns out to h
 
 ## 3. Stack conventions
 
-> ⚠️ **Placeholder — pending DMI-4** (Definir stack frontend/backend desde cero). Once DMI-4 lands, this section becomes concrete: frontend framework, signaling server language, hosting, package manager, linter/formatter, test runner, typecheck command.
+Decided in **DMI-4** — full rationale in [`docs/decisions/DMI-4-stack.md`](./docs/decisions/DMI-4-stack.md).
 
-Until DMI-4 closes:
+- **Repo:** pnpm monorepo. Packages: `packages/web`, `packages/signaling`, `packages/shared`.
+- **Language:** TypeScript everywhere, `strict` (see `tsconfig.base.json`).
+- **Frontend:** Vite + TypeScript, **no UI framework**. Entry `packages/web`.
+- **Signaling/lobby server:** Node + TypeScript + **Socket.io**. Entry `packages/signaling`.
+- **Shared contract:** `packages/shared` is the single source of truth for client↔server message types. Update it there, never redefine wire types in a consumer.
+- **Package manager:** pnpm 9 via corepack. Node ≥ 20.
+- **Commands** (run from repo root): `pnpm dev`, `pnpm build`, `pnpm typecheck`. Per-package: `pnpm --filter @retro64/<pkg> <script>`.
+- **Verify before PR:** `pnpm typecheck` and `pnpm build` must pass. No test runner is wired up yet — say so in the PR if your ticket doesn't add one.
+- **Still open — do NOT invent these:** P2P transport (DMI-2), emulation engine (DMI-3), signaling architecture + STUN/TURN (DMI-5). Block on those tickets rather than guessing.
 
-- **Do not** invent stack choices in feature tickets. If a ticket needs a decision, ask the human or block on DMI-4.
+Other conventions:
+
 - Environments: single stage — **dev only** — kept intentionally simple. Scaling to staging/prod is deferred until product actually needs it.
 - Commit style: **conventional commits** (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, `ci:`), scope optional. Enforced by the git-flow skill.
 
