@@ -5,6 +5,7 @@ This repo is built by an **agentic loop**: one Linear ticket per session, one PR
 - **Linear team:** `dmitry` (prefix `DMI`)
 - **Source of truth for scope:** the Linear ticket. Never expand beyond its acceptance criteria.
 - **Source of truth for the product:** the RETRO64 v2 spec (parent ticket **DMI-1** links it in its description; ask the human if you can't find it).
+- **Source of truth for UI/visual design:** [`design.md`](./design.md) (DMI-29) — the Neo-Retro Pixel design system (colors, typography, spacing, components). Read it before starting any ticket with a UI component (landing, control remapping, connection/latency indicators, error handling, etc.).
 - **Mechanics** (branching, commits, PR opening, Linear state transitions): see [`.claude/skills/git-flow/`](./.claude/skills/git-flow/SKILL.md). This file is the *what*; the skill is the *how*.
 
 ---
