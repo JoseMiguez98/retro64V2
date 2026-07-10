@@ -70,12 +70,12 @@ Decided in **DMI-4** — full rationale in [`docs/decisions/DMI-4-stack.md`](./d
 - **Repo:** pnpm monorepo. Packages: `packages/web`, `packages/signaling`, `packages/shared`.
 - **Language:** TypeScript everywhere, `strict` (see `tsconfig.base.json`).
 - **Frontend:** Vite + TypeScript, **no UI framework**. Entry `packages/web`.
-- **Signaling/lobby server:** Node + TypeScript + **Socket.io**. Entry `packages/signaling`.
+- **Signaling/lobby server:** Node + TypeScript + **Socket.io**. Entry `packages/signaling`. Architecture + STUN/TURN decided in **DMI-5** — see [`docs/decisions/DMI-5-signaling-turn.md`](./docs/decisions/DMI-5-signaling-turn.md). Signaling stays self-hosted here; STUN is Google's public server (dev), TURN is Cloudflare Realtime (separate managed service, creds minted server-side).
 - **Shared contract:** `packages/shared` is the single source of truth for client↔server message types. Update it there, never redefine wire types in a consumer.
 - **Package manager:** pnpm 9 via corepack. Node ≥ 20.
 - **Commands** (run from repo root): `pnpm dev`, `pnpm build`, `pnpm typecheck`. Per-package: `pnpm --filter @retro64/<pkg> <script>`.
 - **Verify before PR:** `pnpm typecheck` and `pnpm build` must pass. No test runner is wired up yet — say so in the PR if your ticket doesn't add one.
-- **Still open — do NOT invent these:** P2P transport (DMI-2), emulation engine (DMI-3), signaling architecture + STUN/TURN (DMI-5). Block on those tickets rather than guessing.
+- **Still open — do NOT invent these:** P2P transport (DMI-2), emulation engine (DMI-3). Block on those tickets rather than guessing.
 
 Other conventions:
 
