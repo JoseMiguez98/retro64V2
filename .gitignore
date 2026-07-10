@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# builds
+dist/
+build/
+.next/
+out/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# claude local overrides
+.claude/settings.local.json
+.claude/worktrees/
+
+# ROMs (never checked in) — path-based to avoid clashing with docs (Genesis uses .md)
+public/roms/
+roms/
