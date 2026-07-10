@@ -1,18 +1,18 @@
 import { PROTOCOL_VERSION } from "@retro64/shared";
-import { SUPPORTED_CONSOLES } from "./emulator/consoles";
+import { isRomExtensionSupported, SUPPORTED_CONSOLES } from "./emulator/consoles";
 import { EmulatorEngine } from "./emulator/engine";
 import "./style.css";
 
 // App shell entrypoint. Wires the real emulator engine integration (DMI-9)
-// into the page. ROM upload UI (DMI-8) and the landing/lobby flow (DMI-25)
-// land in later tickets — until then, the ROM source is read from
-// VITE_ROM_PATH so the engine integration can be exercised end to end.
+// and local ROM upload (DMI-8) into the page. The landing/lobby flow
+// (DMI-25) lands in a later ticket. The ROM file is read entirely
+// client-side via the File API and handed straight to the emulator engine —
+// it is never uploaded to a server.
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("#app not found");
 
-const romPath = import.meta.env.VITE_ROM_PATH as string | undefined;
-const defaultConsoleId = (import.meta.env.VITE_ROM_CONSOLE as string | undefined) ?? SUPPORTED_CONSOLES[0]?.id;
+const defaultConsoleId = SUPPORTED_CONSOLES[0]?.id;
 
 app.innerHTML = `
   <main>
@@ -27,21 +27,22 @@ app.innerHTML = `
           (console) => `<option value="${console.id}">${console.label}</option>`,
         ).join("")}
       </select>
+      <label for="rom-input">ROM file</label>
+      <input type="file" id="rom-input" accept="${SUPPORTED_CONSOLES.flatMap((console) => console.extensions).join(",")}" />
       <div id="controls">
-        <button id="load" ${romPath ? "" : "disabled"}>Load ROM</button>
+        <button id="load" disabled>Load ROM</button>
         <button id="pause" disabled>Pause</button>
         <button id="resume" disabled>Resume</button>
         <button id="stop" disabled>Stop</button>
       </div>
-      <p id="status">${
-        romPath ? "Ready." : "Set VITE_ROM_PATH in packages/web/.env.local, then reload."
-      }</p>
+      <p id="status">Choose a ROM file for the selected console.</p>
       <canvas id="emulator-canvas" style="display: block; width: min(90vw, 640px); aspect-ratio: 4 / 3;"></canvas>
     </section>
   </main>
 `;
 
 const consoleSelect = document.querySelector<HTMLSelectElement>("#console-select")!;
+const romInput = document.querySelector<HTMLInputElement>("#rom-input")!;
 const statusEl = document.querySelector<HTMLParagraphElement>("#status")!;
 const loadButton = document.querySelector<HTMLButtonElement>("#load")!;
 const pauseButton = document.querySelector<HTMLButtonElement>("#pause")!;
@@ -55,7 +56,17 @@ const canvasEl = document.querySelector<HTMLCanvasElement>("#emulator-canvas")!;
 if (defaultConsoleId) consoleSelect.value = defaultConsoleId;
 
 const engine = new EmulatorEngine();
+let selectedRom: File | undefined;
 
+consoleSelect.addEventListener("change", () => {
+  // The accepted formats depend on the console, so re-validate the already
+  // chosen file (if any) against the newly selected console.
+  if (selectedRom) validateSelectedRom(selectedRom);
+});
+romInput.addEventListener("change", () => {
+  const file = romInput.files?.[0];
+  if (file) validateSelectedRom(file);
+});
 loadButton.addEventListener("click", () => void loadRom());
 pauseButton.addEventListener("click", () => {
   engine.pause();
@@ -71,8 +82,23 @@ stopButton.addEventListener("click", () => {
   setControlsForStatus("idle");
 });
 
+function validateSelectedRom(file: File): void {
+  if (!isRomExtensionSupported(file.name, consoleSelect.value)) {
+    selectedRom = undefined;
+    statusEl.textContent = `Unsupported file for the selected console. Expected: ${
+      SUPPORTED_CONSOLES.find((console) => console.id === consoleSelect.value)?.extensions.join(", ") ?? ""
+    }.`;
+    setControlsForStatus("idle");
+    return;
+  }
+
+  selectedRom = file;
+  statusEl.textContent = `Ready to load "${file.name}".`;
+  setControlsForStatus("idle");
+}
+
 async function loadRom(): Promise<void> {
-  if (!romPath) return;
+  if (!selectedRom) return;
 
   setControlsForStatus("loading");
   statusEl.textContent = "Loading…";
@@ -80,7 +106,7 @@ async function loadRom(): Promise<void> {
   try {
     await engine.launch({
       consoleId: consoleSelect.value,
-      rom: romPath,
+      rom: selectedRom,
       element: canvasEl,
     });
     statusEl.textContent = "Running.";
@@ -92,9 +118,10 @@ async function loadRom(): Promise<void> {
 }
 
 function setControlsForStatus(status: "idle" | "loading" | "running" | "paused"): void {
-  loadButton.disabled = !romPath || status === "loading" || status === "running" || status === "paused";
+  loadButton.disabled = !selectedRom || status === "loading" || status === "running" || status === "paused";
   pauseButton.disabled = status !== "running";
   resumeButton.disabled = status !== "paused";
   stopButton.disabled = status === "idle" || status === "loading";
   consoleSelect.disabled = status !== "idle";
+  romInput.disabled = status !== "idle";
 }

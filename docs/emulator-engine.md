@@ -11,14 +11,17 @@ throwaway POC with reusable code in `packages/web`.
 - `packages/web/src/emulator/engine.ts` — `EmulatorEngine`, a typed lifecycle
   wrapper around one Nostalgist instance: `launch`, `pause`, `resume`,
   `stop`, `getStatus`.
-- `packages/web/src/main.ts` — app shell wiring: console selector, canvas,
-  and load/pause/resume/stop controls, driven by the engine above.
+- `packages/web/src/main.ts` — app shell wiring: console selector, ROM file
+  picker, canvas, and load/pause/resume/stop controls, driven by the engine
+  above.
 
-ROM upload (DMI-8) and the landing/lobby flow (DMI-25) aren't built yet, so
-`main.ts` currently reads the ROM source from `VITE_ROM_PATH` (see
-`packages/web/.env.local`, gitignored) rather than a file picker. Swapping
-that for a real `<input type="file">` is DMI-8's job — `EmulatorEngine.launch`
-already accepts a `File` directly, so no engine change should be needed.
+ROM upload (DMI-8) is a plain `<input type="file">`: the chosen `File` is
+validated against the selected console's accepted extensions (see
+`extensions` on `ConsoleDefinition` / `isRomExtensionSupported` in
+`consoles.ts`) and, once valid, handed directly to `EmulatorEngine.launch` —
+the same `rom: string | File` option it already accepted. The file is read
+entirely client-side; it's never sent to a server. The landing/lobby flow
+(DMI-25) isn't built yet.
 
 ## Adding support for a new console
 
@@ -34,15 +37,15 @@ already accepts a `File` directly, so no engine change should be needed.
 
 Per DMI-9's acceptance criteria, the engine must be exercised with at least
 one ROM per category (8/16-bit, N64, PS1). This can't be automated in this
-repo: ROMs are gitignored and never checked in (`packages/web/public/roms/`),
-and this environment has no network access to fetch even freely licensed
-test ROMs. To verify manually:
+repo: ROMs are gitignored and never checked in, and this environment has no
+network access to fetch even freely licensed test ROMs. To verify manually:
 
-1. Drop a legally-owned ROM at `packages/web/public/roms/<file>`.
-2. Set `VITE_ROM_PATH=/roms/<file>` (and `VITE_ROM_CONSOLE=<id>` if it's not
-   the first entry in `SUPPORTED_CONSOLES`) in `packages/web/.env.local`.
-3. `pnpm --filter @retro64/web dev`, open `http://localhost:5173/`.
-4. Click "Load ROM". Success = it renders and runs in the canvas; Pause,
+1. `pnpm --filter @retro64/web dev`, open `http://localhost:5173/`.
+2. Pick the matching console in the selector, then choose a legally-owned
+   ROM file via the "ROM file" picker. A file with an extension the console
+   doesn't support is rejected with an inline error instead of enabling
+   "Load ROM".
+3. Click "Load ROM". Success = it renders and runs in the canvas; Pause,
    Resume, and Stop should all work. Repeat for one 8/16-bit ROM, one N64
    ROM, and one PS1 ROM (PS1 also needs its BIOS file resolvable — see
    `resolveBios` in Nostalgist's docs if you hit a BIOS-not-found error).
