@@ -1,0 +1,31 @@
+{
+  "//": "Committed, team-shared pre-granted permissions for the autonomous loop protocol. Source of truth referenced by orchestrator.md §0 and CLAUDE.md. Personal/machine-specific overrides go in the git-ignored .claude/settings.local.json.",
+  "permissions": {
+    "allow": [
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm test)",
+      "Bash(pnpm lint)",
+      "Bash(pnpm build)",
+      "Bash(pnpm -r typecheck)",
+      "Bash(pnpm -r build)",
+      "Bash(pnpm --filter * typecheck)",
+      "Bash(pnpm --filter * test*)",
+      "Bash(pnpm --filter * lint)",
+      "Bash(pnpm --filter * build)",
+      "Bash(pnpm install)",
+      "Bash(pnpm install *)",
+      "Bash(corepack enable *)",
+      "Bash(git *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "mcp__claude_ai_Linear__list_issues",
+      "mcp__claude_ai_Linear__get_issue",
+      "mcp__claude_ai_Linear__save_issue",
+      "mcp__claude_ai_Linear__list_issue_statuses",
+      "mcp__claude_ai_Linear__list_teams",
+      "mcp__claude_ai_Linear__list_comments",
+      "mcp__claude_ai_Linear__save_comment"
+    ]
+  }
+}
