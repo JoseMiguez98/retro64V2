@@ -31,6 +31,10 @@ pnpm-debug.log*
 .claude/settings.local.json
 .claude/worktrees/
 
+# orchestrator runtime state/logs (not the protocol docs)
+.claude/orchestrator-state.json
+orchestrator-log.jsonl
+
 # ROMs (never checked in) — path-based to avoid clashing with docs (Genesis uses .md)
 public/roms/
 roms/

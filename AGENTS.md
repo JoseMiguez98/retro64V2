@@ -20,6 +20,10 @@ One session = one ticket. Do not batch. Do not touch anything the ticket does no
 2. Get the top candidate with `get_issue` (use `includeRelations: true`).
 3. Skip it and try the next if **any** `blockedBy` relation is not in `Done`.
 4. If the human specified a ticket by ID, use that one — still validate blockers.
+5. If this session was launched by the orchestrator (`orchestrator.md`), the
+   ticket is already selected — skip steps 1–3 above and go straight to §1.2.
+   Steps 1–4 apply when this file is invoked directly (manual/interactive runs
+   with no orchestrator involved).
 
 ### 1.2 Read before you code
 
@@ -76,7 +80,7 @@ Decided in **DMI-4** — full rationale in [`docs/decisions/DMI-4-stack.md`](./d
 - **Package manager:** pnpm 9 via corepack. Node ≥ 20.
 - **Commands** (run from repo root): `pnpm dev`, `pnpm build`, `pnpm typecheck`. Per-package: `pnpm --filter @retro64/<pkg> <script>`.
 - **Verify before PR:** `pnpm typecheck` and `pnpm build` must pass. No test runner is wired up yet — say so in the PR if your ticket doesn't add one.
-- **Still open — do NOT invent these:** P2P transport (DMI-2), emulation engine (DMI-3). Block on those tickets rather than guessing.
+- **Settled architecture — build on these, don't re-decide:** P2P transport (DMI-2, native `RTCPeerConnection`/`RTCDataChannel`) and emulation engine (DMI-3, Nostalgist.js) are both **Decided** — see [`docs/decisions/DMI-2-p2p-transport.md`](./docs/decisions/DMI-2-p2p-transport.md) and [`docs/decisions/DMI-3-emulation-engine.md`](./docs/decisions/DMI-3-emulation-engine.md). Follow those docs; only escalate if a ticket needs a decision they don't actually make.
 
 Other conventions:
 
