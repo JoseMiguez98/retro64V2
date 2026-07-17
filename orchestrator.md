@@ -1,4 +1,4 @@
-# Orchestrator Protocol — Retro64 v2
+# Orchestrator Protocol
 
 This document defines the **decision flow** a Claude Code session must follow when
 launched unattended (as a routine/cron job) against the `dmitry` team / `Retro64`
@@ -27,9 +27,12 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
 
 ## 0. Bootstrap checks (every run, before anything else)
 
-- [ ] Read `.claude/orchestrator-state.json` (create if missing, see §7). If it says
-  `status: "waiting_for_human"`, go straight to **§4.3 Resume-after-wait** — do not
-  pick a new ticket or re-ask a question that's still open.
+- [ ] **No local state file.** Each Routine run gets a fresh clone — nothing
+  written to disk in a prior run exists now. Instead, re-derive whether you're
+  mid-escalation by checking the ticket(s) currently in `Todo` for a Linear
+  comment from you (`🤖 Orchestrator:`) that hasn't been followed by a human
+  reply or a state change since. If found, go straight to **§4.3
+  Resume-after-wait** — do not pick a new ticket or re-post the question.
 - [ ] Confirm `.claude/settings.json` → `permissions.allow` includes: `pnpm typecheck`,
   `pnpm test`, `pnpm lint`, `pnpm build`, `git *`, `gh pr create`, `gh pr view`,
   `gh pr list`. If any are missing, add them (self-serve, no escalation needed —
@@ -131,21 +134,14 @@ Even if a candidate is found and looks completely unblocked, the orchestrator
    > 🤖 Orchestrator: This ticket looks unblocked and ready (`blockedBy` clear,
    > AC present). Move to **Todo** if you want me to start it on the next run,
    > or reply here if you want changes to the spec first.
-2. Write `.claude/orchestrator-state.json`:
-   ```json
-   {
-     "status": "waiting_for_human",
-     "reason": "backlog_candidate_proposed",
-     "ticket": "DMI-XX",
-     "asked_at": "<ISO timestamp>"
-   }
-   ```
-3. End the session. Do not attempt any other work this run.
+2. End the session. Do not attempt any other work this run. Nothing else needs
+   to be recorded — the comment itself *is* the state (see §0: no local file
+   survives between runs, so Linear has to be authoritative anyway).
 
-On the **next** run, §0 bootstrap sees `waiting_for_human` and checks: has the
-ticket moved to Todo, or is there a reply comment? If yes to either, clear the
-state file and proceed normally (§2 or re-evaluate the reply). If neither, exit
-again without re-posting the question.
+On the **next** run, §0 bootstrap checks the same Linear ticket: has it moved to
+Todo, or is there a reply comment after your `🤖 Orchestrator:` one? If yes to
+either, proceed normally (§2 or re-evaluate the reply). If neither, exit again
+without re-posting the question.
 
 ---
 
@@ -183,12 +179,19 @@ escalation is only a ticket that needs a decision *not* yet captured there.
 
 ### 4.3 Resume-after-wait
 
-If bootstrap found `status: "waiting_for_human"`:
+If §0 found a pending `🤖 Orchestrator:` comment with no reply yet:
 
-- Re-check the trigger condition (ticket moved to Todo? PR merged? comment
-  reply present?).
-- If resolved → clear state file, proceed from the appropriate step.
+- Re-check the trigger condition directly against Linear/GitHub (ticket moved
+  to Todo? PR merged? comment reply present?) — there is no local flag to read,
+  the ticket itself is the flag.
+- If resolved → proceed from the appropriate step.
 - If still unresolved → exit immediately, no new action, no duplicate question.
+
+This run doesn't have to wait for the next scheduled trigger to notice a reply.
+Wire a Linear webhook (`resourceTypes: ["Comment"]`, filtered to the `dmitry`
+team) to POST to this routine's API-trigger endpoint. A reply to the escalation
+comment then starts a fresh run within seconds instead of waiting for the next
+cron tick.
 
 ---
 
@@ -235,10 +238,15 @@ When a blocker requires human input:
    >
    > Reply with a number, or just merge/close #86 yourself and I'll pick it up
    > next run.
-2. Update `.claude/orchestrator-state.json` with `status: "waiting_for_human"`,
-   the ticket, the reason, and the options offered.
+2. Send a notification (Slack, Telegram, or whatever channel is wired up) so
+   the escalation doesn't sit unread until someone happens to check Linear —
+   this run's own history is why: the DMI-1 escalation was posted correctly but
+   went unnoticed because nothing pushed it anywhere. Call the notification
+   step explicitly here rather than assuming Linear's own notification settings
+   are enough.
 3. End the session cleanly. Never guess and proceed past an escalation point in
-   the same run it was raised.
+   the same run it was raised. There is no state file to update — the Linear
+   comment itself is the record (see §0).
 
 ---
 
@@ -247,20 +255,20 @@ When a blocker requires human input:
 Every run — successful, blocked, or idle — ends with:
 - A short summary comment on the ticket touched (if any): what was done, PR
   link, current status.
-- `.claude/orchestrator-state.json` updated to reflect the true end state
-  (`idle`, `waiting_for_human`, or `in_review`).
 - Nothing left uncommitted in the working tree, and no dangling local branches
-  from a run that didn't produce a PR.
+  from a run that didn't produce a PR. (This matters less under Routines, where
+  each run gets a fresh clone anyway, but still applies to manual/local runs.)
 
 ---
 
 ## 8. Idempotency (this runs unattended, repeatedly)
 
-- Never post the same question twice — always check `orchestrator-state.json`
-  and existing comments before posting.
+Under Routines, every run starts from a clean clone — there is no local memory
+of prior runs. Linear and GitHub are the **only** sources of truth; every check
+below has to be a live read, not a cached flag.
+
+- Never post the same question twice — before posting, check existing comments
+  on the ticket for a prior `🤖 Orchestrator:` message with no reply since.
 - Never open a second PR for a ticket that already has one open.
-- Never re-propose a Backlog candidate that was already proposed and is still
-  pending a reply.
-- If the state file and Linear's actual state disagree (e.g. state file says
-  `in_review` but the PR was already merged and the ticket closed), trust
-  Linear/GitHub as source of truth and self-correct the state file.
+- Never re-propose a Backlog candidate that already has a pending, unreplied
+  `🤖 Orchestrator:` comment.
