@@ -249,12 +249,13 @@ When a blocker requires human input:
      "<one-line summary of the blocker> — see https://linear.app/pawsy/issue/<TICKET>"
    ```
 
-   It POSTs to whatever webhook `ORCHESTRATOR_NOTIFY_WEBHOOK` points at (Slack,
-   Telegram, ntfy, …) — channel-agnostic on purpose, so it doesn't depend on the
-   agent backend. It's **best-effort**: if the webhook is unconfigured or the
-   POST fails it exits without blocking the run, because the Linear comment is
-   the durable record. See `.env.example` for the env vars and `scripts/notify.sh`
-   for formats. (DMI-68.)
+   The notification is **best-effort**: if it fails or the webhook is
+   unconfigured it exits without blocking the run, because the Linear comment
+   from step 1 is the durable record. That's why step 3 still ends the session
+   regardless of the notify exit code. Everything about *how* the script
+   works — channels, env vars, formats, exit codes — lives in
+   `scripts/notify.sh --help` (and `.env.example`); don't restate it here. This
+   step owns only *when* to notify and *what* the message says. (DMI-68.)
 3. End the session cleanly. Never guess and proceed past an escalation point in
    the same run it was raised. There is no state file to update — the Linear
    comment itself is the record (see §0).

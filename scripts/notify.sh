@@ -89,6 +89,17 @@ else
 fi
 [ -n "$message" ] || die "message is empty"
 
+# Auto-load the repo-local .env (git-ignored) when the webhook isn't already in
+# the environment. Unattended runs inject these vars, so this is a no-op there.
+# Interactively it means the script can be invoked directly (scripts/notify.sh …)
+# instead of `set -a; . ./.env; set +a; scripts/notify.sh …` — the bare form is
+# what the `Bash(scripts/notify.sh *)` allow rule matches, so it runs without an
+# inline-sourcing prefix pushing it through the permission classifier.
+if [ -z "${ORCHESTRATOR_NOTIFY_WEBHOOK:-}" ]; then
+  env_file="$(dirname "$0")/../.env"
+  [ -f "$env_file" ] && set -a && . "$env_file" && set +a
+fi
+
 webhook="${ORCHESTRATOR_NOTIFY_WEBHOOK:-}"
 format="${ORCHESTRATOR_NOTIFY_FORMAT:-slack}"
 

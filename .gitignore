@@ -38,3 +38,6 @@ orchestrator-log.jsonl
 # ROMs (never checked in) — path-based to avoid clashing with docs (Genesis uses .md)
 public/roms/
 roms/
+
+logs/
+design-examples/
