@@ -19,6 +19,8 @@
       "Bash(gh pr create *)",
       "Bash(gh pr view *)",
       "Bash(gh pr list *)",
+      "Bash(scripts/notify.sh *)",
+      "Bash(bash scripts/notify.sh *)",
       "mcp__claude_ai_Linear__list_issues",
       "mcp__claude_ai_Linear__get_issue",
       "mcp__claude_ai_Linear__save_issue",
@@ -26,6 +28,13 @@
       "mcp__claude_ai_Linear__list_teams",
       "mcp__claude_ai_Linear__list_comments",
       "mcp__claude_ai_Linear__save_comment"
-    ]
+    ],
+    "autoMode": {
+      "//": "The `allow` list above stops the permission PROMPT; the auto-mode classifier is a separate risk gate that independently blocks external network egress. notify.sh's whole job is an escalation POST to ORCHESTRATOR_NOTIFY_WEBHOOK, so it must be cleared here too. `$defaults` keeps all built-in classifier rules.",
+      "allow": [
+        "$defaults",
+        "Bash commands invoking scripts/notify.sh — the orchestrator's own best-effort escalation notifier (orchestrator.md §6). Its only external effect is POSTing the escalation message to the operator-configured ORCHESTRATOR_NOTIFY_WEBHOOK, which is the intended purpose. Always allow, including when it appears after an inline `. ./.env` / `set -a` prefix."
+      ]
+    }
   }
 }

@@ -35,8 +35,9 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
   Resume-after-wait** — do not pick a new ticket or re-post the question.
 - [ ] Confirm `.claude/settings.json` → `permissions.allow` includes: `pnpm typecheck`,
   `pnpm test`, `pnpm lint`, `pnpm build`, `git *`, `gh pr create`, `gh pr view`,
-  `gh pr list`. If any are missing, add them (self-serve, no escalation needed —
-  this is infra, not a product decision) and log the change.
+  `gh pr list`, `scripts/notify.sh *` (the escalation notifier, §6). If any are
+  missing, add them (self-serve, no escalation needed — this is infra, not a
+  product decision) and log the change.
 - [ ] `git status` — working tree must be clean and on `main` (or wherever the
   protocol starts from) before touching anything. If dirty from a previous
   interrupted run, see §6 (autonomy boundaries) before deciding whether to
@@ -238,12 +239,23 @@ When a blocker requires human input:
    >
    > Reply with a number, or just merge/close #86 yourself and I'll pick it up
    > next run.
-2. Send a notification (Slack, Telegram, or whatever channel is wired up) so
-   the escalation doesn't sit unread until someone happens to check Linear —
-   this run's own history is why: the DMI-1 escalation was posted correctly but
-   went unnoticed because nothing pushed it anywhere. Call the notification
-   step explicitly here rather than assuming Linear's own notification settings
-   are enough.
+2. **Push the escalation out-of-band so a human actually finds out** — the
+   Linear comment alone is not enough. This run's own history is why: the DMI-1
+   escalation was posted correctly but went unnoticed because nothing pushed it
+   anywhere. Run the notification script explicitly:
+
+   ```bash
+   scripts/notify.sh --title "🤖 Orchestrator: <TICKET> blocked" \
+     "<one-line summary of the blocker> — see https://linear.app/pawsy/issue/<TICKET>"
+   ```
+
+   The notification is **best-effort**: if it fails or the webhook is
+   unconfigured it exits without blocking the run, because the Linear comment
+   from step 1 is the durable record. That's why step 3 still ends the session
+   regardless of the notify exit code. Everything about *how* the script
+   works — channels, env vars, formats, exit codes — lives in
+   `scripts/notify.sh --help` (and `.env.example`); don't restate it here. This
+   step owns only *when* to notify and *what* the message says. (DMI-68.)
 3. End the session cleanly. Never guess and proceed past an escalation point in
    the same run it was raised. There is no state file to update — the Linear
    comment itself is the record (see §0).
