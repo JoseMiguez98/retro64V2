@@ -30,3 +30,23 @@ export type PocSignal =
   | { type: "offer"; data: unknown }
   | { type: "answer"; data: unknown }
   | { type: "ice-candidate"; data: unknown };
+
+// --- DMI-21 signaling relay --------------------------------------------
+// Real 2-peer SDP/ICE relay (server.ts's `poc:*` block stays untouched — it
+// backs the standalone DMI-2 POC page and is superseded separately when the
+// real lobby UI, DMI-25, lands). Still pairing-only, no room codes yet
+// (DMI-20). `data` stays opaque JSON for the same reason as `PocSignal`.
+
+export interface PeerPaired {
+  initiator: boolean;
+}
+
+export type SignalMessage =
+  | { type: "offer"; data: unknown }
+  | { type: "answer"; data: unknown }
+  | { type: "ice-candidate"; data: unknown };
+
+/** Emitted to the remaining peer when its paired peer disconnects mid-exchange. */
+export interface PeerLeft {
+  reason: string;
+}
