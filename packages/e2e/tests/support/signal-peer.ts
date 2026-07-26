@@ -58,8 +58,27 @@ export async function createSignalPeer(page: Page): Promise<void> {
       errors: [],
     };
 
+    // Only the surface this harness actually touches. The real socket.io client
+    // types aren't reachable from inside `page.evaluate` (this body is compiled
+    // here but executed in the page against the injected UMD global).
+    interface SignalSocket {
+      connected: boolean;
+      emit(event: string, payload?: unknown): void;
+      on<T>(event: string, handler: (payload: T) => void | Promise<void>): void;
+      once(event: string, handler: () => void): void;
+      close(): void;
+    }
+
+    // The `signal:message` envelope, discriminated so each branch below gets the
+    // right payload type without a cast.
+    type SignalMessage =
+      | { type: "offer" | "answer"; data: RTCSessionDescriptionInit }
+      | { type: "ice-candidate"; data: RTCIceCandidateInit };
+
     // `io` comes from the injected UMD bundle.
-    const socket = (window as unknown as { io: (url: string) => any }).io(signalingUrl);
+    const socket = (
+      window as unknown as { io: (url: string) => SignalSocket }
+    ).io(signalingUrl);
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
@@ -117,7 +136,7 @@ export async function createSignalPeer(page: Page): Promise<void> {
       socket.emit("signal:message", { type: "offer", data: offer });
     });
 
-    socket.on("signal:message", async (msg: { type: string; data: any }) => {
+    socket.on("signal:message", async (msg: SignalMessage) => {
       try {
         if (msg.type === "offer") {
           await pc.setRemoteDescription(msg.data);

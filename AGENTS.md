@@ -51,11 +51,12 @@ gate between implementation and §1.5.
 #### 1.4.1 Static gate (always)
 
 ```bash
+pnpm lint        # eslint, flat config at the repo root
 pnpm typecheck   # or pnpm --filter @retro64/<pkg> typecheck
 pnpm build       # or pnpm --filter @retro64/<pkg> build
 ```
 
-Both must pass. This is necessary, never sufficient — do not stop here.
+All three must pass. This is necessary, never sufficient — do not stop here.
 
 #### 1.4.2 Pick the verification tier
 
@@ -118,7 +119,22 @@ implement → run the verification → pass?
 - Attach the actual verification output to the PR's Test plan — the pass/fail
   lines, not a prose claim that it worked.
 
-#### 1.4.5 Then
+#### 1.4.5 CI runs this gate too
+
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) re-runs the same gate on
+every PR and every push to `main`, on a clean machine:
+
+| Job | Runs |
+|---|---|
+| **Lint · Typecheck · Build** | `pnpm lint`, `pnpm typecheck`, `pnpm build` |
+| **E2E (Playwright)** | `pnpm test` against the real signaling + web servers |
+
+Running it locally is still your job — CI is the backstop that catches a skipped
+step, not a substitute for verifying before you open the PR. **A red CI run is a
+failed verification**: fix it within the §1.4.4 attempt budget or escalate. Never
+merge past it, and never disable a job to make it green.
+
+#### 1.4.6 Then
 
 - Do not mark the Linear ticket `Done` — that's the human's call at merge time.
 
@@ -154,7 +170,9 @@ Decided in **DMI-4** — full rationale in [`docs/decisions/DMI-4-stack.md`](./d
 - **Signaling/lobby server:** Node + TypeScript + **Socket.io**. Entry `packages/signaling`. Architecture + STUN/TURN decided in **DMI-5** — see [`docs/decisions/DMI-5-signaling-turn.md`](./docs/decisions/DMI-5-signaling-turn.md). Signaling stays self-hosted here; STUN is Google's public server (dev), TURN is Cloudflare Realtime (separate managed service, creds minted server-side).
 - **Shared contract:** `packages/shared` is the single source of truth for client↔server message types. Update it there, never redefine wire types in a consumer.
 - **Package manager:** pnpm 9 via corepack. Node ≥ 20.
-- **Commands** (run from repo root): `pnpm dev`, `pnpm build`, `pnpm typecheck`, `pnpm test`. Per-package: `pnpm --filter @retro64/<pkg> <script>`.
+- **Commands** (run from repo root): `pnpm dev`, `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`. Per-package: `pnpm --filter @retro64/<pkg> <script>`.
+- **Lint:** ESLint 9 flat config, one `eslint.config.js` at the repo root covering every package (rule sets shouldn't drift between them). Deliberately not type-aware — `pnpm typecheck` already runs `tsc --noEmit` everywhere. `pnpm lint:fix` for autofixes.
+- **CI:** GitHub Actions ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs lint/typecheck/build and the Playwright suite on every PR — see §1.4.5.
 - **E2E / verification:** `packages/e2e` — Playwright, wired up in **DMI-73**. `pnpm test` boots the real signaling + web dev servers and drives them with real browsers. First run on a new machine needs `pnpm --filter @retro64/e2e install:browsers`.
 - **Verify before PR:** `pnpm typecheck` and `pnpm build` must pass, **and** the ticket's acceptance criteria must be asserted per §1.4. Static checks alone are not a verification.
 - **Settled architecture — build on these, don't re-decide:** P2P transport (DMI-2, native `RTCPeerConnection`/`RTCDataChannel`) and emulation engine (DMI-3, Nostalgist.js) are both **Decided** — see [`docs/decisions/DMI-2-p2p-transport.md`](./docs/decisions/DMI-2-p2p-transport.md) and [`docs/decisions/DMI-3-emulation-engine.md`](./docs/decisions/DMI-3-emulation-engine.md). Follow those docs; only escalate if a ticket needs a decision they don't actually make.

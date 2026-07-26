@@ -183,6 +183,10 @@ process-level surface.
 
 Two consequences the orchestrator owns:
 
+- **CI enforces the same gate independently.** `.github/workflows/ci.yml` re-runs
+  lint/typecheck/build and the Playwright suite on every PR, so a skipped or
+  misreported local check still surfaces. A red run is a failed verification —
+  same 3-attempt budget, then escalate. Never disable a job to go green.
 - **A failing verification never becomes a PR.** The worker fixes and re-runs
   in-session, up to 3 attempts; after that it escalates (§6) and ends the
   session with the branch intact. An escalation here is a normal outcome, not a

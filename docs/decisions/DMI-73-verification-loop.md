@@ -35,6 +35,22 @@ answered by default: completely.
    supplement. It never satisfies the gate on its own.
 5. **Where a drivable path exists, the spec gets committed** — verification has to
    outlive the session that produced it.
+6. **CI re-runs the gate on the forge** (`.github/workflows/ci.yml`, added
+   2026-07-26 on the ticket's revised AC). An agent running its own checks and
+   reporting the result is the same actor-as-judge problem the rest of this
+   decision is about: the gate only binds if something outside the session can
+   see it fail. Two jobs — static (`lint`/`typecheck`/`build`) and e2e
+   (`pnpm test`) — split so a syntax error fails fast instead of queuing behind
+   a browser suite.
+
+### Lint
+
+The repo had no linter before this. `eslint.config.js` (flat config, ESLint 9 +
+typescript-eslint) sits at the root and covers all four packages — one rule set,
+so standards can't drift per package. It is deliberately **not** type-aware:
+`pnpm typecheck` already runs `tsc --noEmit` over every package in the same
+pipeline, and `recommendedTypeChecked` would re-pay that cost to catch little
+`tsc` doesn't. Lint's job here is what the compiler is happy to let through.
 
 ## Why not claude-in-chrome, given the ticket asked for it
 
@@ -81,6 +97,12 @@ rather than banned. It's a supplement, not the gate.
   failure.
 - Tickets with no runtime surface (docs, protocol files — this one included) are
   explicitly exempt, and must say so in the PR rather than silently skipping.
+- Every PR now pays ~1 min (static) and a few minutes (e2e) of CI. Accepted: the
+  suite is small, and the jobs run in parallel with `cancel-in-progress` on PR
+  pushes.
+- A red CI run is a failed verification, subject to the same §1.4.4 attempt
+  budget. Disabling a job to go green is the CI-shaped version of weakening a
+  test, and is prohibited for the same reason.
 
 ## Validation
 
