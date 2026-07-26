@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { Server, type Socket } from "socket.io";
-import { PROTOCOL_VERSION, type PocSignal } from "@retro64/shared";
+import { PROTOCOL_VERSION, type PocSignal, type SignalMessage } from "@retro64/shared";
 
 // Scaffolding entrypoint for the signaling + lobby server.
 // Room management, code generation, and SDP/ICE relay are implemented by the
@@ -58,6 +58,49 @@ io.on("connection", (socket) => {
     const otherId = pocPairs.get(socket.id);
     pocPairs.delete(socket.id);
     if (otherId) pocPairs.delete(otherId);
+  });
+});
+
+// --- DMI-21 signaling relay ---------------------------------------------
+// Real 2-peer SDP/ICE relay: pairs the first two callers of `signal:join`
+// FIFO, relays offer/answer/ICE between them, and tells the surviving peer
+// when its partner disconnects mid-exchange. No room codes yet (DMI-20) —
+// that layers on top of this pairing primitive in a follow-up ticket.
+let signalWaiting: Socket | null = null;
+const signalPairs = new Map<string, string>();
+
+function unpairSignal(socket: Socket, reason: string) {
+  if (signalWaiting?.id === socket.id) signalWaiting = null;
+  const otherId = signalPairs.get(socket.id);
+  signalPairs.delete(socket.id);
+  if (otherId) {
+    signalPairs.delete(otherId);
+    io.to(otherId).emit("signal:peer-left", { reason });
+  }
+}
+
+io.on("connection", (socket) => {
+  socket.on("signal:join", () => {
+    if (signalWaiting && signalWaiting.connected) {
+      const other = signalWaiting;
+      signalPairs.set(socket.id, other.id);
+      signalPairs.set(other.id, socket.id);
+      signalWaiting = null;
+      other.emit("signal:paired", { initiator: true });
+      socket.emit("signal:paired", { initiator: false });
+    } else {
+      signalWaiting = socket;
+    }
+  });
+
+  socket.on("signal:message", (payload: SignalMessage) => {
+    const otherId = signalPairs.get(socket.id);
+    if (otherId) io.to(otherId).emit("signal:message", payload);
+  });
+
+  socket.on("disconnect", (reason) => {
+    console.log(`[signaling] peer disconnected: ${socket.id} (${reason})`);
+    unpairSignal(socket, reason);
   });
 });
 
