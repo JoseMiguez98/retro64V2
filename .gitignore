@@ -41,3 +41,10 @@ roms/
 
 logs/
 design-examples/
+
+# playwright verification artifacts (AGENTS.md §1.4) — the specs are committed,
+# the run output is not
+test-results/
+playwright-report/
+blob-report/
+.playwright/

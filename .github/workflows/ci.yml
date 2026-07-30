@@ -1,0 +1,84 @@
+name: CI
+
+# The verification gate from AGENTS.md §1.4, enforced by the forge rather than
+# by the agent that wrote the code. An agent can claim its checks passed; this
+# re-runs them on a clean machine where nobody can skip a step.
+#
+# Pull requests are the only trigger, because they're the only way `main` moves:
+# it's protected (`.github/branch-protection.json`) with both jobs below as
+# required checks, `strict: true`, and `enforce_admins: true`. Nobody — admins
+# included — pushes to it directly, so a `push: [main]` run could only ever
+# re-verify a tree the PR run already verified, and it would gate nothing.
+on:
+  pull_request:
+
+# A new push to a PR makes the in-flight run obsolete — don't burn minutes on it.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Fast, static feedback: lint + typecheck + build. Split from e2e so a syntax
+  # error fails in ~1 min instead of waiting behind a browser suite.
+  static:
+    name: Lint · Typecheck · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Enable corepack
+        # pnpm version comes from the `packageManager` field in package.json,
+        # so it can never drift from what developers run locally.
+        run: corepack enable
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      - run: pnpm typecheck
+
+      - run: pnpm build
+
+  # The real verification: boots the actual signaling server and web dev server
+  # and drives them with a real browser (packages/e2e).
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser
+        # `--with-deps` pulls the system libraries headless Chromium needs on a
+        # bare ubuntu runner; the repo's own script only fetches the browser.
+        run: pnpm --filter @retro64/e2e exec playwright install --with-deps chromium
+
+      - run: pnpm test
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-report
+          path: packages/e2e/playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore

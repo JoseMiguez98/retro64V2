@@ -34,10 +34,15 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
   reply or a state change since. If found, go straight to **§4.3
   Resume-after-wait** — do not pick a new ticket or re-post the question.
 - [ ] Confirm `.claude/settings.json` → `permissions.allow` includes: `pnpm typecheck`,
-  `pnpm test`, `pnpm lint`, `pnpm build`, `git *`, `gh pr create`, `gh pr view`,
-  `gh pr list`, `scripts/notify.sh *` (the escalation notifier, §6). If any are
-  missing, add them (self-serve, no escalation needed — this is infra, not a
-  product decision) and log the change.
+  `pnpm test`, `pnpm test:e2e`, `pnpm lint`, `pnpm build`, `pnpm exec playwright *`
+  (the verification gate, §4.2 / `AGENTS.md` §1.4), `git *`, `gh pr create`,
+  `gh pr view`, `gh pr list`, `scripts/notify.sh *` (the escalation notifier, §6).
+  If any are missing, add them (self-serve, no escalation needed — this is infra,
+  not a product decision) and log the change.
+- [ ] Playwright browsers present. `pnpm --filter @retro64/e2e install:browsers`
+  is idempotent and cheap when already installed — a fresh Routine clone won't
+  have them, and without them every verification fails for infrastructure
+  reasons rather than product ones.
 - [ ] `git status` — working tree must be clean and on `main` (or wherever the
   protocol starts from) before touching anything. If dirty from a previous
   interrupted run, see §6 (autonomy boundaries) before deciding whether to
@@ -164,11 +169,37 @@ Before starting implementation on the selected ticket:
 ### 4.2 Execution
 
 Hand off to the `AGENTS.md` session-per-ticket protocol as normal:
-branch → implement → `pnpm typecheck` + `pnpm build` (per-package via
-`pnpm --filter @retro64/<pkg> <script>` if the ticket only touches one package;
-see git-flow skill for lint/test once those are wired up) → commit →
-`gh pr create` (never merge) → comment on the Linear ticket linking the PR →
-move ticket status to `In Review`.
+branch → implement → **verify (`AGENTS.md` §1.4)** → commit → `gh pr create`
+(never merge) → comment on the Linear ticket linking the PR → move ticket status
+to `In Review`.
+
+The verify step is a **gate, not a formality** (DMI-73). `pnpm typecheck` +
+`pnpm build` (per-package via `pnpm --filter @retro64/<pkg> <script>` if the
+ticket only touches one package) prove the code is well-formed; they do not
+prove the feature works. `AGENTS.md` §1.4 additionally requires the ticket's
+acceptance criteria to be asserted against the actually-running app — `pnpm test`
+(Playwright, `packages/e2e`) for anything with a browser-reachable or
+process-level surface.
+
+Two consequences the orchestrator owns:
+
+- **CI enforces the same gate independently.** `.github/workflows/ci.yml` re-runs
+  lint/typecheck/build and the Playwright suite on every PR, so a skipped or
+  misreported local check still surfaces. Both jobs are required checks on
+  `main` (`.github/branch-protection.json`), so a red run blocks the merge
+  outright — the PR run is the only place this gate is enforced, since a
+  protected `main` never takes a direct push. A red run is a failed
+  verification — same 3-attempt budget, then escalate. Never disable a job to
+  go green.
+- **A failing verification never becomes a PR.** The worker fixes and re-runs
+  in-session, up to 3 attempts; after that it escalates (§6) and ends the
+  session with the branch intact. An escalation here is a normal outcome, not a
+  failed run.
+- **Unattended runs must use Playwright, not claude-in-chrome.** claude-in-chrome
+  needs a live Chrome, an installed extension, and interactively-granted
+  per-site permissions — none of which exist under `claude -p` or a cron
+  trigger, and none of which will exist in DMI-76's service either. See
+  [`docs/decisions/DMI-73-verification-loop.md`](./docs/decisions/DMI-73-verification-loop.md).
 
 Model selection: Sonnet (default) for this implementation work. Only escalate to
 Opus if the ticket turns out to require an architecture-level decision not yet
@@ -206,8 +237,11 @@ cron tick.
   a settled decision under `docs/decisions/` (the DMI-1–DMI-6 range, DMI-2 and
   DMI-3 included, is all captured there), or existing code conventions elsewhere
   in the repo — but never by inventing a decision no `docs/decisions/` file makes
-- Standard dependency/install issues (`pnpm install`, lockfile drift)
+- Standard dependency/install issues (`pnpm install`, lockfile drift, missing
+  Playwright browsers — just install them)
 - Rebasing your own feature branch on `main` when there's no conflict
+- A verification failure you can actually diagnose and fix, within the 3-attempt
+  budget in `AGENTS.md` §1.4.4
 
 **Always escalate — stop and ask (§6):**
 - Merging any PR, yours or someone else's
@@ -219,6 +253,12 @@ cron tick.
   `docs/decisions/`. The DMI-1–DMI-6 decisions (DMI-2 P2P transport and DMI-3
   emulation engine included) are settled and safe to build on; escalate only when
   a ticket needs a decision no `docs/decisions/` file actually makes
+- A verification (`AGENTS.md` §1.4) still failing after 3 fix attempts — escalate
+  with the failing output; never open the PR anyway, and never weaken the test
+  to get past the gate
+- An acceptance criterion that can't be verified in this environment at all
+  (e.g. one requiring a staging deploy) — flag it explicitly rather than letting
+  the passing tests imply it was covered
 - Anything touching deploy config, secrets, or external service credentials
 - A ticket whose `blockedBy` graph looks inconsistent with its description
   (e.g. description references an issue ID that Linear's relations don't confirm)
