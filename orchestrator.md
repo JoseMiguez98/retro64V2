@@ -1,8 +1,9 @@
 # Orchestrator Protocol
 
 This document defines the **decision flow** a Claude Code session must follow when
-launched unattended (as a routine/cron job) against the `dmitry` team / `Retro64`
-project in Linear.
+launched unattended (as a routine/cron job) against the `dmitry` team in Linear.
+That team holds several projects and they are not interchangeable — **§2.1 is the
+allow-list and the priority order between them**, and no step below may widen it.
 
 It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and the
 `git-flow` skill. This file decides *what to work on and whether it's safe to start*.
@@ -53,13 +54,15 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
 ## 1. Decision tree (high level)
 
 ```
-                    ┌─────────────────────────┐
-                    │  Any ticket in "Todo"?   │
-                    └────────────┬─────────────┘
+                    ┌──────────────────────────────┐
+                    │  Any in-scope ticket (§2.1)  │
+                    │  in "Todo"?                  │
+                    └────────────┬─────────────────┘
                           yes │       │ no
                               │       ▼
                               │   Scan Backlog for a workable
-                              │   candidate (§3)
+                              │   candidate (§3) — orchestrator
+                              │   queue first, per §2.1
                               │       │
                               │   found? ──no──▶ Nothing to do. Log & exit.
                               │       │
@@ -88,15 +91,51 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
 
 ## 2. Selecting the active ticket ("Todo" path)
 
-If one or more tickets are already in **Todo**, ticket selection itself is
-`AGENTS.md` §1.1's job (`list_issues` by priority, `blockedBy` validation) — don't
-re-implement it here. The one thing to add on top:
+### 2.1 Working scope — which projects are in play
 
-- If the ticket `AGENTS.md` §1.1 would pick turns out **not** startable (e.g. a
-  `blockedBy` was added after it was moved to Todo), don't apply §1.1's normal
-  "skip and try the next Todo ticket" behavior here — someone explicitly queued
-  *this* ticket, so treat it as a blocker and escalate (§5) instead of silently
-  moving on to a different one.
+Scope is an **allow-list with a priority order between projects**, never "whatever
+the team-wide priority sort returns first". `team = dmitry` alone is not a scope.
+
+| Project | Autonomous pickup | Role |
+|---|---|---|
+| **Agent Orchestrator** | Yes — **primary queue** | The actual deliverable: this protocol, the trigger layer, state reconciliation, the verification gate. Scanned first, always. |
+| **Retro64** | Yes, but **on demand only** (see below) | The substrate the loop is exercised against. Real feature work is what proves the loop does something; it is not the goal. |
+| **Monopoly Online** | **No** | Out of scope for autonomous pickup. It holds ~30 Backlog tickets, several `Urgent`/`High`, which a team-wide priority sort would pull ahead of everything here. Nobody has greenlit agentic work in it. |
+
+A **Retro64** ticket is in play only when one of these holds:
+
+1. **A human moved it to `Todo`.** That *is* the on-demand request — an explicit
+   queue action outranks this section's default ordering (see §2.2).
+2. **Orchestrator work needs it as substrate.** E.g. DMI-72 (supervised e2e run)
+   cannot be proven against a docs-only ticket; it needs a real feature ticket to
+   consume. Here the *orchestrator* ticket is the one in flight and the Retro64
+   ticket is the material — that's still one ticket per session in §2.2's sense,
+   not a second parallel run. Report both at §7.
+3. **The Agent Orchestrator queue is empty** — nothing in-scope in `Todo`, and no
+   Backlog candidate that passes §3.1.
+
+Any project **not** in the table is out of scope, and widening the table is not
+self-serve: a new project appearing in the team gets reported (§7) and left alone
+until the table says otherwise. Same for a repo other than this one — scope here
+is per-project, and cross-repo work is DMI-81's problem, not an improvisation.
+
+### 2.2 The Todo path
+
+If one or more **in-scope** tickets (§2.1) are already in **Todo**, ticket
+selection itself is `AGENTS.md` §1.1's job (`list_issues` by priority, `blockedBy`
+validation) — don't re-implement it here. What this file adds on top:
+
+- **Filter by §2.1 before applying §1.1's priority sort.** A `Todo` ticket in an
+  out-of-scope project is not work: skip it and name it in the §7 report, so a
+  ticket parked in the wrong project is visible rather than silently ignored.
+- **Project order beats the priority field** when several in-scope tickets are in
+  `Todo`: an Agent Orchestrator ticket goes first even if a Retro64 ticket carries
+  a higher `priority`. Within a single project, §1.1's sort decides.
+- If the ticket §1.1 would pick turns out **not** startable (e.g. a `blockedBy`
+  was added after it was moved to Todo), don't apply §1.1's normal "skip and try
+  the next Todo ticket" behavior here — someone explicitly queued *this* ticket,
+  so treat it as a blocker and escalate (§5) instead of silently moving on to a
+  different one.
 - Only one ticket in flight per session. Do not batch-start multiple tickets in a
   single session even if several are in Todo.
 
@@ -106,9 +145,15 @@ re-implement it here. The one thing to add on top:
 
 ### 3.1 Candidate criteria
 
+Scan **project by project in §2.1's order**, not the team as a whole: exhaust the
+Agent Orchestrator backlog before a Retro64 ticket is even considered a candidate
+(§2.1 case 3). A single team-wide `list_issues` sorted by priority is the wrong
+call here — it mixes projects and buries the primary queue.
+
 A Backlog ticket is a **workable candidate** only if ALL of the following hold:
 
-- `team = dmitry`, `project = Retro64`
+- It is **in scope per §2.1** — `team = dmitry` *and* the project is on the
+  allow-list, with Retro64 only reachable under §2.1's on-demand conditions
 - Status is exactly `Backlog` (not an epic/parent container — check it has no
   sub-issues that represent the actual work)
 - `blockedBy` relations (Linear's relation field, **never** issue IDs mentioned in
@@ -122,6 +167,9 @@ A Backlog ticket is a **workable candidate** only if ALL of the following hold:
 ### 3.2 Ranking
 
 If multiple candidates qualify, prefer, in order:
+0. **Project order per §2.1** — this dominates everything below. Ranking rules
+   1–3 break ties *within* a project; they never promote a Retro64 candidate over
+   an Agent Orchestrator one.
 1. Ticket explicitly flagged as low-dependency in past notes (e.g. DMI-8, DMI-18
    were called out as good first real-feature candidates)
 2. Higher `blocks` fan-out — prefer the candidate that unblocks the most future
@@ -307,6 +355,12 @@ When a blocker requires human input:
 Every run — successful, blocked, or idle — ends with:
 - A short summary comment on the ticket touched (if any): what was done, PR
   link, current status.
+- **Scope observations, in the run's own output** (there may be no ticket to
+  comment on): any `Todo` ticket skipped for being out of scope (§2.2), any
+  project in the team that §2.1's table doesn't cover, and — when a Retro64
+  ticket was consumed as substrate (§2.1 case 2) — both ticket IDs and which
+  one was actually in flight. A silent skip is indistinguishable from an
+  overlooked ticket; this line is what makes the difference visible.
 - Nothing left uncommitted in the working tree, and no dangling local branches
   from a run that didn't produce a PR. (This matters less under Routines, where
   each run gets a fresh clone anyway, but still applies to manual/local runs.)

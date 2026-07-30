@@ -19,6 +19,11 @@ One session = one ticket. Do not batch. Do not touch anything the ticket does no
 ### 1.1 Pick the ticket
 
 1. `list_issues` on team `dmitry` with `state: "Todo"`, ordered by priority (Urgent → Low).
+   Then **drop everything outside the project allow-list in [`orchestrator.md`](./orchestrator.md) §2.1**
+   before picking: the team also holds projects nobody has greenlit for agentic
+   work, and a raw team-wide priority sort surfaces those first. Agent
+   Orchestrator tickets come before product-project ones regardless of the
+   `priority` field.
 2. Get the top candidate with `get_issue` (use `includeRelations: true`).
 3. Skip it and try the next if **any** `blockedBy` relation is not in `Done`.
 4. If the human specified a ticket by ID, use that one — still validate blockers.
@@ -202,7 +207,10 @@ Other conventions:
 Every session starts with these MCP calls against the `dmitry` team:
 
 ```
-list_issues { team: "dmitry", state: "Todo", orderBy: priority }
+# One call per in-scope project, in orchestrator.md §2.1's order — not one
+# team-wide call, which mixes in projects that aren't greenlit for agentic work.
+list_issues { team: "dmitry", project: "Agent Orchestrator", state: "Todo", orderBy: priority }
+list_issues { team: "dmitry", project: "Retro64", state: "Todo", orderBy: priority }  # only per §2.1
 get_issue  { id: "DMI-XX", includeRelations: true }   # for the candidate
 get_issue  { id: "<each blockedBy id>" }              # verify blockers are Done
 ```
