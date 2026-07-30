@@ -67,10 +67,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright browser
-        # `--with-deps` pulls the system libraries headless Chromium needs on a
-        # bare ubuntu runner; the repo's own script only fetches the browser.
-        run: pnpm --filter @retro64/e2e exec playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        # `--with-deps` pulls the system libraries the headless browsers need on a
+        # bare ubuntu runner; the repo's own script only fetches the browsers.
+        # Firefox is here because DMI-18's AC names it explicitly — the suite runs
+        # that spec under both engines (packages/e2e/playwright.config.ts).
+        run: pnpm --filter @retro64/e2e exec playwright install --with-deps chromium firefox
 
       - run: pnpm test
 

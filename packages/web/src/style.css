@@ -19,3 +19,40 @@ main {
 #emulator-canvas {
   image-rendering: pixelated;
 }
+
+/* Input-device status (DMI-18). Follows design.md: a rectangular monospace chip
+   with sharp 0px corners, tonal layering plus a 1px outline instead of a shadow. */
+#input-status {
+  margin-top: 24px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+#input-source-chip {
+  padding: 4px 8px;
+  border: 1px solid;
+  font-family: "Space Mono", ui-monospace, monospace;
+  letter-spacing: 0.08em;
+}
+
+/* Tertiary "Handheld Green" is design.md's reserved tone for online/health status. */
+#input-source-chip[data-input-source="gamepad"] {
+  border-color: #00a74b;
+  background: #003111;
+  color: #4ae176;
+}
+
+/* Keyboard is the documented fallback, not a fault — neutral outline, never the error tone. */
+#input-source-chip[data-input-source="keyboard"] {
+  border-color: #4d4354;
+  background: #1c1b1b;
+  color: #cfc2d6;
+}
+
+#input-source-detail {
+  color: #cfc2d6;
+}

@@ -1,13 +1,14 @@
 import { PROTOCOL_VERSION } from "@retro64/shared";
 import { acceptedExtensions, isRomExtensionSupported, SUPPORTED_CONSOLES } from "./emulator/consoles";
 import { EmulatorEngine } from "./emulator/engine";
+import { InputSourceDetector, type InputSourceState } from "./input/input-source";
 import "./style.css";
 
-// App shell entrypoint. Wires the real emulator engine integration (DMI-9)
-// and local ROM upload (DMI-8) into the page. The landing/lobby flow
-// (DMI-25) lands in a later ticket. The ROM file is read entirely
-// client-side via the File API and handed straight to the emulator engine —
-// it is never uploaded to a server.
+// App shell entrypoint. Wires the real emulator engine integration (DMI-9),
+// local ROM upload (DMI-8) and input-device detection (DMI-18) into the page.
+// The landing/lobby flow (DMI-25) lands in a later ticket. The ROM file is read
+// entirely client-side via the File API and handed straight to the emulator
+// engine — it is never uploaded to a server.
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("#app not found");
@@ -38,6 +39,11 @@ app.innerHTML = `
       <p id="status">Choose a ROM file for the selected console.</p>
       <canvas id="emulator-canvas" style="display: block; width: min(90vw, 640px); aspect-ratio: 4 / 3;"></canvas>
     </section>
+
+    <section id="input-status" aria-live="polite">
+      <span id="input-source-chip" data-input-source="keyboard">KEYBOARD</span>
+      <span id="input-source-detail">No gamepad detected — keyboard controls active.</span>
+    </section>
   </main>
 `;
 
@@ -52,11 +58,20 @@ const stopButton = document.querySelector<HTMLButtonElement>("#stop")!;
 // emulator launches, so a later re-lookup by the original "#emulator-canvas"
 // selector fails on relaunch. Capture the element once and reuse the reference.
 const canvasEl = document.querySelector<HTMLCanvasElement>("#emulator-canvas")!;
+const inputChipEl = document.querySelector<HTMLSpanElement>("#input-source-chip")!;
+const inputDetailEl = document.querySelector<HTMLSpanElement>("#input-source-detail")!;
 
 if (defaultConsoleId) consoleSelect.value = defaultConsoleId;
 
 const engine = new EmulatorEngine();
 let selectedRom: File | undefined;
+
+// Input-device detection (DMI-18). `subscribe` fires immediately with the
+// current state, so the chip is correct on first paint rather than after the
+// first connect/disconnect.
+const inputDetector = new InputSourceDetector();
+inputDetector.subscribe(renderInputSource);
+inputDetector.start();
 
 consoleSelect.addEventListener("change", () => {
   // The accepted formats depend on the console, so re-validate the already
@@ -81,6 +96,20 @@ stopButton.addEventListener("click", () => {
   statusEl.textContent = "Stopped.";
   setControlsForStatus("idle");
 });
+
+function renderInputSource(state: InputSourceState): void {
+  inputChipEl.dataset.inputSource = state.active;
+  inputChipEl.textContent = state.active === "gamepad" ? "GAMEPAD" : "KEYBOARD";
+  inputDetailEl.textContent = describeInputSource(state);
+}
+
+function describeInputSource({ gamepads }: InputSourceState): string {
+  const [first, ...others] = gamepads;
+  if (!first) return "No gamepad detected — keyboard controls active.";
+
+  const extra = others.length > 0 ? ` (+${others.length} more)` : "";
+  return `Gamepad connected: ${first.id}${extra}.`;
+}
 
 function validateSelectedRom(file: File): void {
   if (!isRomExtensionSupported(file.name, consoleSelect.value)) {

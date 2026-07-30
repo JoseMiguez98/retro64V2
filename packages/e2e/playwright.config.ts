@@ -47,6 +47,19 @@ export default defineConfig({
         },
       },
     },
+    {
+      // DMI-18's third acceptance criterion is "works in Chrome and Firefox at
+      // minimum", and a criterion about cross-engine behaviour can only be
+      // verified by actually running a second engine.
+      //
+      // Scoped to that spec on purpose: the DMI-21 signaling spec depends on the
+      // Chromium-only launch flags above, and its own AC never asked for Firefox.
+      // Widening it here would be scope creep in someone else's ticket — a
+      // Firefox WebRTC run belongs to whichever ticket asks for it.
+      name: "firefox",
+      testMatch: /dmi-18-.*\.spec\.ts$/,
+      use: { ...devices["Desktop Firefox"] },
+    },
   ],
 
   webServer: [

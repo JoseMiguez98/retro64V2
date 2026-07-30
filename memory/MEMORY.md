@@ -11,6 +11,38 @@ already records (code, git history, `docs/decisions/`, the ticket). Newest first
 
 ---
 
+## Verifying a device API in Playwright: fake the device, and let a browser project prove "works in X" (2026-07-30)
+
+**Context:** DMI-18 (gamepad detection + keyboard fallback). Two things cost time
+and are not obvious from the code.
+
+**1. You cannot synthesise a real `GamepadEvent`.** Its constructor requires a
+genuine `Gamepad`, and a plain object throws — so a test can't hand the app a
+fake controller through the event. The way out is a design constraint worth
+keeping: **the event handler must treat the event as "something changed" and
+re-read `navigator.getGamepads()`** rather than trust `event.gamepad`. Then a
+test only needs to patch the snapshot and dispatch a bare `new Event(...)`, and
+the app keeps one source of truth. Patch the getter with
+`Object.defineProperty(navigator, "getGamepads", …)`, not assignment — it lives
+on `Navigator.prototype` and Firefox won't let a bare assignment shadow it.
+Install it via `page.addInitScript` *before* `goto`, since a detector that reads
+the list during module init otherwise races the first paint.
+
+**2. Polling is not redundant with the events.** `gamepadconnected` fires only
+while the page is live, so a controller the browser already knew about (reload,
+in-app navigation) never produces one — it just appears in `getGamepads()`. A
+~250ms reconcile covers that and a dropped disconnect. It's separately testable:
+mutate the snapshot with the event suppressed and assert the UI still catches up.
+
+**3. An AC that names a browser is a matrix, not a test.** "Works in Chrome and
+Firefox" is satisfied by a second `projects: []` entry in
+`playwright.config.ts` — scoped with `testMatch` so it runs only the spec that
+asked for it. Without the scope, the Chromium-only WebRTC spec (DMI-21, which
+needs `--allow-loopback-in-peer-connection`) gets dragged into Firefox and fails
+for reasons belonging to someone else's ticket. Adding an engine also means
+adding it to `install:browsers` **and** to `ci.yml`, or CI installs one browser
+and the run dies on infrastructure rather than on the feature.
+
 ## Auto-mode classifier is a second, independent gate above `permissions.allow` (2026-07-23)
 
 **Context:** DMI-68 wired `scripts/notify.sh` as the out-of-band escalation
