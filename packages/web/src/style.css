@@ -1,58 +1,530 @@
+/* Neo-Retro Pixel — the design system in /design.md (DMI-29), applied to the
+   landing → lobby → session flow (DMI-25).
+
+   The rules that come straight from that document and are load-bearing here:
+   sharp 0px shapes with stepped corners on primary CTAs, depth from tonal
+   layering plus 1px outlines instead of blurred shadows, Space Mono for
+   headings and labels against Geist for body copy, and a 4px baseline unit.
+   Fonts are declared by name with local fallbacks rather than fetched — adding
+   a webfont dependency is not in this ticket's scope. */
+
 :root {
   color-scheme: dark;
-  font-family: system-ui, sans-serif;
+
+  /* Palette (design.md front-matter) */
+  --surface: #131313;
+  --surface-container-lowest: #0e0e0e;
+  --surface-container-low: #1c1b1b;
+  --surface-container-high: #2a2a2a;
+  --on-surface: #e5e2e1;
+  --on-surface-variant: #cfc2d6;
+  --outline: #988d9f;
+  --outline-variant: #4d4354;
+  --primary: #ddb7ff;
+  --on-primary: #490080;
+  --secondary: #adc6ff;
+  --tertiary: #4ae176;
+  --tertiary-container: #00a74b;
+  --on-tertiary-container: #003111;
+  --error: #ffb4ab;
+  --error-container: #93000a;
+  --on-error-container: #ffdad6;
+
+  /* 4px baseline unit */
+  --u: 4px;
+  --gutter: 24px;
+  --margin: 16px;
+  --container-max: 1280px;
+
+  --font-display: "Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-body: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+@media (min-width: 900px) {
+  :root {
+    --margin: 48px;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  display: grid;
-  place-items: center;
-  background: #0d0d12;
-  color: #f5f5f5;
+  background: var(--surface);
+  color: var(--on-surface);
+  /* Level 0 per design.md: deep charcoal under a fixed 2px scanline pattern. */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.016) 0,
+    rgba(255, 255, 255, 0.016) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  background-attachment: fixed;
+  /* Deliberately no `overflow-x: hidden` here. It would stop a mobile viewport
+     from scrolling sideways, but by clipping the overflow rather than removing
+     it — and it would also make the responsive spec pass against a layout that
+     is genuinely too wide. The layout has to fit on its own. */
 }
 
-main {
-  text-align: center;
-}
+/* ── Shell ──────────────────────────────────────────────────────────────── */
 
-#emulator-canvas {
-  image-rendering: pixelated;
-}
-
-/* Input-device status (DMI-18). Follows design.md: a rectangular monospace chip
-   with sharp 0px corners, tonal layering plus a 1px outline instead of a shadow. */
-#input-status {
-  margin-top: 24px;
+.app {
+  min-height: 100vh;
   display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: 0 var(--margin);
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--u) * 4);
   flex-wrap: wrap;
+  padding: calc(var(--u) * 6) 0;
+  border-bottom: 1px solid var(--surface-container-high);
+}
+
+.topbar__brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 0.08em;
+  color: var(--primary);
+}
+
+.topbar__tag,
+.topbar__proto {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--on-surface-variant);
+}
+
+.topbar__proto {
+  margin-left: auto;
+  color: var(--outline);
+}
+
+.views {
+  flex: 1;
+  padding: calc(var(--u) * 12) 0;
+}
+
+/* One document, three views: `[data-view]` on the shell decides which one is on
+   screen, so navigating never tears down the emulator canvas. */
+.view {
+  display: none;
+}
+
+.app[data-view="landing"] #view-landing,
+.app[data-view="lobby"] #view-lobby,
+.app[data-view="session"] #view-session {
+  display: block;
+}
+
+/* ── Landing ────────────────────────────────────────────────────────────── */
+
+.hero__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin: 0 0 calc(var(--u) * 4);
+}
+
+.hero__lede {
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--on-surface-variant);
+  max-width: 56ch;
+  margin: 0;
+}
+
+@media (min-width: 900px) {
+  .hero__title {
+    font-size: 48px;
+    line-height: 1.1;
+  }
+}
+
+.steps {
+  list-style: none;
+  margin: calc(var(--u) * 16) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--gutter);
+}
+
+@media (min-width: 900px) {
+  .steps {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+/* Level 1 per design.md: flat lighter charcoal with a 1px outline, no shadow. */
+.card {
+  background: var(--surface-container-low);
+  border: 1px solid var(--surface-container-high);
+  padding: calc(var(--u) * 6);
+}
+
+.step__title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0 0 calc(var(--u) * 6);
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--u) * 3);
+}
+
+.step__num {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--primary);
+}
+
+.step__status {
+  margin: calc(var(--u) * 4) 0 0;
+  font-size: 14px;
+  color: var(--on-surface-variant);
+}
+
+.field {
+  margin-bottom: calc(var(--u) * 4);
+}
+
+.field__label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+  margin-bottom: calc(var(--u) * 2);
+}
+
+/* Inputs per design.md: bottom-border only at rest, full neon box on focus. */
+.field__control {
+  width: 100%;
+  max-width: 100%;
+  padding: calc(var(--u) * 2) 0;
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--on-surface);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom-color: var(--outline-variant);
+  border-radius: 0;
+}
+
+.field__control:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.field__control:disabled {
+  color: var(--outline);
+  cursor: not-allowed;
+}
+
+.field__control--file {
+  padding-block: calc(var(--u) * 3);
+  font-size: 14px;
+}
+
+.field__control--code {
+  font-family: var(--font-display);
+  font-size: 24px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.room-actions {
+  display: grid;
+  gap: calc(var(--u) * 8);
+}
+
+.room-action__title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 calc(var(--u) * 2);
+}
+
+.room-action__copy {
+  margin: 0 0 calc(var(--u) * 4);
+  font-size: 14px;
+  color: var(--on-surface-variant);
+}
+
+.join-form {
+  display: grid;
+  gap: calc(var(--u) * 3);
+  justify-items: start;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.btn {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: calc(var(--u) * 3) calc(var(--u) * 6);
+  border-radius: 0;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* "Stepped corners" — the notched clip design.md asks for instead of a radius. */
+.btn--primary {
+  background: var(--primary);
+  color: var(--on-primary);
+  clip-path: polygon(
+    8px 0,
+    100% 0,
+    100% calc(100% - 8px),
+    calc(100% - 8px) 100%,
+    0 100%,
+    0 8px
+  );
+}
+
+.btn--primary:not(:disabled):hover {
+  background: var(--secondary);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--on-surface);
+  border-color: var(--outline);
+}
+
+.btn--ghost:not(:disabled):hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn--quiet {
+  background: transparent;
+  color: var(--on-surface-variant);
+  border-color: var(--outline-variant);
+}
+
+.btn--quiet:not(:disabled):hover {
+  color: var(--on-surface);
+  border-color: var(--outline);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ── Alerts ─────────────────────────────────────────────────────────────── */
+
+.alert {
+  margin: calc(var(--u) * 4) 0 0;
+  padding: calc(var(--u) * 3) calc(var(--u) * 4);
+  background: var(--error-container);
+  border: 1px solid var(--error);
+  color: var(--on-error-container);
+  font-size: 14px;
+}
+
+.alert[hidden] {
+  display: none;
+}
+
+/* ── Lobby ──────────────────────────────────────────────────────────────── */
+
+.lobby {
+  max-width: 640px;
+}
+
+.lobby__title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 calc(var(--u) * 2);
+}
+
+.lobby__copy {
+  margin: 0 0 calc(var(--u) * 6);
+  color: var(--on-surface-variant);
+}
+
+/* Level 2 per design.md: dark surface inside a neon 1px border. */
+.code {
+  font-family: var(--font-display);
+  font-weight: 700;
+  /* clamp keeps a 6-character code inside a 320px viewport without wrapping. */
+  font-size: clamp(32px, 11vw, 56px);
+  letter-spacing: 0.16em;
+  /* The tracking adds a trailing gap after the last glyph; the indent puts it
+     back on the left so the code reads optically centred. */
+  text-indent: 0.16em;
+  text-align: center;
+  margin: 0 0 calc(var(--u) * 6);
+  padding: calc(var(--u) * 6) calc(var(--u) * 2);
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--primary);
+  color: var(--primary);
+}
+
+.lobby__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 3);
+}
+
+.lobby__status {
+  margin: calc(var(--u) * 6) 0 0;
+  color: var(--tertiary);
+  font-family: var(--font-display);
+  font-size: 14px;
+}
+
+.lobby__rom {
+  margin: calc(var(--u) * 2) 0 0;
+  font-size: 14px;
+  color: var(--on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
+/* ── Session ────────────────────────────────────────────────────────────── */
+
+.session__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--u) * 3);
+  padding-bottom: calc(var(--u) * 4);
+  border-bottom: 1px solid var(--surface-container-high);
+}
+
+.session__title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+  margin-right: auto;
+}
+
+.session__stage {
+  /* Hugs the canvas instead of stretching to the container: design.md frames
+     game art in a 1px internal border, which only reads as a frame when it sits
+     against the artwork. */
+  width: fit-content;
+  max-width: 100%;
+  margin: calc(var(--u) * 6) auto;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--surface-container-high);
+  padding: calc(var(--u) * 3);
+}
+
+.stage__canvas {
+  display: block;
+  /* A concrete width, not `100%`: the stage sizes itself with `fit-content`, and
+     a percentage width inside it has nothing to resolve against. */
+  width: 640px;
+  max-width: 100%;
+  aspect-ratio: 4 / 3;
+  image-rendering: pixelated;
+  background: #000;
+}
+
+.session__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 3);
+}
+
+.session__status {
+  margin: calc(var(--u) * 4) 0 0;
+  font-size: 14px;
+  color: var(--on-surface-variant);
+}
+
+/* ── Chips & status bar ─────────────────────────────────────────────────── */
+
+/* Rectangular, monospace, sharp corners — design.md's chip spec. */
+.chip {
+  padding: var(--u) calc(var(--u) * 2);
+  border: 1px solid var(--outline-variant);
+  background: var(--surface-container-low);
+  color: var(--on-surface-variant);
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.statusbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--u) * 2) calc(var(--u) * 3);
+  padding: calc(var(--u) * 4) 0;
+  border-top: 1px solid var(--surface-container-high);
   font-size: 12px;
 }
 
-#input-source-chip {
-  padding: 4px 8px;
-  border: 1px solid;
-  font-family: "Space Mono", ui-monospace, monospace;
-  letter-spacing: 0.08em;
+.statusbar__input {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 2);
+  flex-wrap: wrap;
+  color: var(--on-surface-variant);
 }
 
-/* Tertiary "Handheld Green" is design.md's reserved tone for online/health status. */
+/* Tertiary "Handheld Green" is design.md's reserved tone for online/health. */
+#signaling-chip[data-connection="online"] {
+  border-color: var(--tertiary-container);
+  background: var(--on-tertiary-container);
+  color: var(--tertiary);
+}
+
+#signaling-chip[data-connection="offline"] {
+  border-color: var(--error);
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+
+/* Input-device status (DMI-18). */
 #input-source-chip[data-input-source="gamepad"] {
-  border-color: #00a74b;
-  background: #003111;
-  color: #4ae176;
+  border-color: var(--tertiary-container);
+  background: var(--on-tertiary-container);
+  color: var(--tertiary);
 }
 
-/* Keyboard is the documented fallback, not a fault — neutral outline, never the error tone. */
+/* Keyboard is the documented fallback, not a fault — neutral outline, never
+   the error tone. */
 #input-source-chip[data-input-source="keyboard"] {
-  border-color: #4d4354;
-  background: #1c1b1b;
-  color: #cfc2d6;
-}
-
-#input-source-detail {
-  color: #cfc2d6;
+  border-color: var(--outline-variant);
+  background: var(--surface-container-low);
+  color: var(--on-surface-variant);
 }

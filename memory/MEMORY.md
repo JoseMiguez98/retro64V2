@@ -11,6 +11,54 @@ already records (code, git history, `docs/decisions/`, the ticket). Newest first
 
 ---
 
+## Verifying "responsive" without writing a test that can't fail (2026-07-30)
+
+**Context:** DMI-25's third AC is "basic responsive — works on desktop, doesn't
+break on mobile". It is the easiest criterion in the repo so far to assert
+*vacuously*, and two of the obvious ways to write it are wrong in opposite
+directions.
+
+**1. `overflow-x: hidden` on `body` makes the honest assertion unfalsifiable.**
+It's the reflexive fix for sideways scroll, but it *clips* the overflow rather
+than removing it — so `scrollWidth > clientWidth` goes quiet while the layout
+is still too wide, and the content past the edge is now simply unreachable. The
+rule is deliberately absent from `style.css`, with a comment saying why, and
+the spec asserts on a layout that has to fit on its own.
+
+**2. `toBeInViewport()` is too strict, and failing it teaches the wrong fix.**
+A landing page that scrolls vertically on a 667px-tall phone is normal. Demanded
+literally, that assertion pushes you to compress a perfectly good layout to
+satisfy a test nobody asked for. What actually breaks on mobile is a control
+that can't be *reached* — so `expectReachable()` in
+`tests/support/landing-flow.ts` scrolls the way a person would, then requires
+the control to be on screen and enabled.
+
+**3. Name the offender, not just the symptom.** `overflowingElements()` returns
+every on-screen element whose right edge crosses the viewport, tagged by test
+id. A bare "the page is 40px too wide" tells you nothing about which of sixty
+elements did it.
+
+**Corollary, and the reason this entry exists:** both bugs this ticket fixed
+were found by the specs rather than confirmed by them — the second one *was*
+the masked overflow above. A verification tier that can only ever agree with
+the implementation isn't the gate AGENTS.md §1.4 is asking for.
+
+## Leaving a room needs no `room:leave` — reconnect the socket (2026-07-30)
+
+**Context:** DMI-25 needed a way out of a room ("no dead-ends"), and the DMI-20
+protocol has no leave event.
+
+The server already frees the seat and notifies the surviving peer on
+`disconnect` (`rooms.leave` in `packages/signaling/src/rooms.ts`). So
+`RoomClient.leave()` disconnects and immediately reconnects: same server code
+path, a fresh `socket.id`, and no new event on a wire contract that another
+ticket owns. Worth reaching for before widening a protocol — the "missing"
+event was already implemented under a different name.
+
+One consequence to know about: the reconnect means the peer gets a **new**
+`peerId`, so anything that keys per-peer state across a leave/rejoin can't
+assume the id is stable.
+
 ## Asserting a time-based criterion: parameterise the clock, and always test "and not before" (2026-07-30)
 
 **Context:** DMI-20's third AC is "automatic expiration of inactive rooms (define
