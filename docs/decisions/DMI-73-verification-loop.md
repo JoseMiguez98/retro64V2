@@ -41,7 +41,27 @@ answered by default: completely.
    decision is about: the gate only binds if something outside the session can
    see it fail. Two jobs — static (`lint`/`typecheck`/`build`) and e2e
    (`pnpm test`) — split so a syntax error fails fast instead of queuing behind
-   a browser suite.
+   a browser suite. **Trigger: `pull_request` only** (revised 2026-07-30 on
+   review) — `main` is protected via `.github/branch-protection.json` with both
+   jobs as required checks, `strict: true` and `enforce_admins: true`, so it
+   only advances through a merged PR whose run was already green on an
+   up-to-date tree. A `push: [main]` trigger would re-verify that same tree and
+   gate nothing, and describing it as part of the gate contradicted the
+   protection rules. Caveat worth knowing: `.github/branch-protection.json` is
+   the *declared* ruleset, versioned in the repo — GitHub's protection API
+   rejects it while this repo is private on the free plan (`403 Upgrade to
+   GitHub Pro or make this repository public`), so it has to be applied
+   (`gh api -X PUT repos/:owner/:repo/branches/main/protection --input
+   .github/branch-protection.json`) once the plan allows it. The protocol is
+   written for that regime deliberately: agents never merge anyway (§1.5), so
+   the only thing that changes when it's live is that a human can't either.
+   Accepted trade-off — one file to apply, versus docs that describe a
+   push-to-`main` path nobody should use.
+7. **`AGENTS.md` stays self-contained; links in it are provenance, not
+   dependencies** (added 2026-07-30 on review). Review question: should the
+   protocol reference tickets at all, given a ticket can disappear? Answer: the
+   line isn't "ticket ID vs. no ticket ID", it's *what a rule depends on to be
+   followable*. See "Referencing decisions from `AGENTS.md`" below.
 
 ### Lint
 
@@ -103,6 +123,41 @@ rather than banned. It's a supplement, not the gate.
 - A red CI run is a failed verification, subject to the same §1.4.4 attempt
   budget. Disabling a job to go green is the CI-shaped version of weakening a
   test, and is prohibited for the same reason.
+
+## Referencing decisions from `AGENTS.md` (review question, 2026-07-30)
+
+Raised in review of this PR: *should `AGENTS.md`'s instructions reference tickets
+at all, or does that add a dependency that can disappear?*
+
+The useful line isn't "mentions a `DMI-XX` ID or not" — it's **what a rule needs
+in order to be followable**. Two different things were getting conflated:
+
+| Kind of reference | Can it rot? | Verdict |
+|---|---|---|
+| A **Linear ticket / external URL** — renamable, closable, access-gated, invisible to `git` | Yes, silently, and nobody notices until an agent is mid-run | Never load-bearing in `AGENTS.md` |
+| A **file committed in this repo** (`docs/decisions/*.md`, `design.md`, the git-flow skill) | Only via a PR that a human reviews, in the same commit history as the rule | Fine — and already the file's convention (§2 stack → `DMI-4-stack.md`, signaling → `DMI-5-signaling-turn.md`, DMI-2/DMI-3) |
+
+So the resolution is not to strip the reference, but to make sure it never
+carries weight:
+
+- `AGENTS.md` states the rule **in full, inline**. §1.4.3 already did — Playwright
+  is the default and the only unattended option, claude-in-chrome supplements
+  locally and never satisfies the gate alone. Reordered so the rules come first
+  and the decision-doc link follows, labelled *background only, not required
+  reading*.
+- Dropped the `(DMI-73)` from the `### 1.4` heading. A ticket ID in a heading
+  reads as part of the rule's identity; as inline provenance in prose it reads as
+  what it is. The IDs elsewhere in `AGENTS.md` (§2's stack notes, the git-flow
+  skill pointer) stay for exactly that reason.
+- Codified the convention in `AGENTS.md`'s header bullets, so the next agent
+  writing a rule there doesn't have to re-derive it: the file is self-contained
+  and normative; in-repo links and `DMI-XX` IDs are provenance; *which* ticket to
+  work on comes from Linear (§1.1), *how to work* must not.
+
+Cost of the alternative (inlining the rationale instead of linking it): §1.4
+would carry the `run.log` MCP-server evidence, the claude-in-chrome capability
+table, and the PR #17 validation numbers — several screens of "why" inside a file
+agents read to find out "what to do". The decision doc exists to keep that split.
 
 ## Validation
 

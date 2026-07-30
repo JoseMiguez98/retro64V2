@@ -7,6 +7,7 @@ This repo is built by an **agentic loop**: one Linear ticket per session, one PR
 - **Source of truth for the product:** the RETRO64 v2 spec (parent ticket **DMI-1** links it in its description; ask the human if you can't find it).
 - **Source of truth for UI/visual design:** [`design.md`](./design.md) (DMI-29) — the Neo-Retro Pixel design system (colors, typography, spacing, components). Read it before starting any ticket with a UI component (landing, control remapping, connection/latency indicators, error handling, etc.).
 - **Mechanics** (branching, commits, PR opening, Linear state transitions): see [`.claude/skills/git-flow/`](./.claude/skills/git-flow/SKILL.md). This file is the *what*; the skill is the *how*.
+- **How to read the links in this file:** this file is **self-contained and normative** — every rule here is followable without opening anything else. Links to in-repo files (`design.md`, `docs/decisions/*.md`, the git-flow skill) and the `DMI-XX` IDs beside them are **provenance and rationale, not required reading**: they're versioned in this repo, so they travel with the rule instead of rotting, and a stale one costs you context, never the rule. Never write a rule here that can only be followed by reading a Linear ticket or any other external URL — *which* ticket you work on comes from Linear (§1.1), but *how you work* has to survive a ticket being renamed, closed, or moved out of reach.
 - **Lessons learned** — durable, project-wide knowledge that isn't obvious from the code, the tickets, or the decision docs: [`memory/MEMORY.md`](./memory/MEMORY.md). Read it at the start of a session; consult it whenever something surprises you; and **add to it** whenever you learn something a future agent would otherwise waste time rediscovering (keep entries non-redundant with what the repo already records).
 
 ---
@@ -41,7 +42,7 @@ Before touching the repo:
 - No drive-by refactors, no "while I'm here" cleanups, no speculative abstractions.
 - If you discover a real problem outside the ticket's scope, file a new Linear ticket via `save_issue` and keep going.
 
-### 1.4 Verify — the verification loop (DMI-73)
+### 1.4 Verify — the verification loop
 
 **A PR is not "done" because it compiles. It is done when something other than your
 own judgement has confirmed the acceptance criteria hold.** Typecheck and build
@@ -80,8 +81,7 @@ the remaining green tests imply full coverage.
 #### 1.4.3 Which tool
 
 The step is defined by its **outcome** — the app ran and the AC were asserted
-against it — not by a tool. Rationale and the evidence behind this in
-[`docs/decisions/DMI-73-verification-loop.md`](./docs/decisions/DMI-73-verification-loop.md).
+against it — not by a tool.
 
 - **Default, and the only option for unattended runs: Playwright** (`pnpm test`,
   or the `playwright` MCP server for exploratory poking). It is headless, needs
@@ -92,6 +92,11 @@ against it — not by a tool. Rationale and the evidence behind this in
   permissions, none of which exist under `claude -p` or a cron trigger. **It
   never satisfies this gate on its own** — if you used it, the committed
   Playwright spec still has to exist.
+
+Background only, not required reading: the evidence for choosing Playwright over
+claude-in-chrome is written up in
+[`docs/decisions/DMI-73-verification-loop.md`](./docs/decisions/DMI-73-verification-loop.md).
+The two rules above are complete without it.
 
 #### 1.4.4 The loop
 
@@ -122,17 +127,25 @@ implement → run the verification → pass?
 #### 1.4.5 CI runs this gate too
 
 [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) re-runs the same gate on
-every PR and every push to `main`, on a clean machine:
+every pull request, on a clean machine:
 
 | Job | Runs |
 |---|---|
 | **Lint · Typecheck · Build** | `pnpm lint`, `pnpm typecheck`, `pnpm build` |
 | **E2E (Playwright)** | `pnpm test` against the real signaling + web servers |
 
+**The PR is the only trigger, because a PR is the only way `main` moves.** `main`
+is protected (`.github/branch-protection.json`): both jobs above are required
+checks, `strict: true` means the branch has to be up to date before it can merge,
+an approving review is required, and force-pushes and deletions are off — for
+admins too. So there is no direct push to `main` for CI to cover; the run on the
+PR *is* the run that gates the merge.
+
 Running it locally is still your job — CI is the backstop that catches a skipped
 step, not a substitute for verifying before you open the PR. **A red CI run is a
 failed verification**: fix it within the §1.4.4 attempt budget or escalate. Never
-merge past it, and never disable a job to make it green.
+disable a job to make it green and never look for a way around a required check —
+the merge is the human's call regardless (§1.5).
 
 #### 1.4.6 Then
 
