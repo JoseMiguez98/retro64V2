@@ -18,6 +18,10 @@ One session = one ticket. Do not batch. Do not touch anything the ticket does no
 
 ### 1.1 Pick the ticket
 
+0. **Check for work already in flight first (§4.1).** An open PR of yours with
+   unanswered review feedback, a red CI run, or an `In Review` ticket with a new
+   human comment is this session's work — handle it per `orchestrator.md` §4.4 and
+   stop here. Only when there's none of that do you pick a *new* ticket below.
 1. `list_issues` on team `dmitry` with `state: "Todo"`, ordered by priority (Urgent → Low).
    Then **drop everything outside the project allow-list in [`orchestrator.md`](./orchestrator.md) §2.1**
    before picking: the team also holds projects nobody has greenlit for agentic
@@ -28,9 +32,10 @@ One session = one ticket. Do not batch. Do not touch anything the ticket does no
 3. Skip it and try the next if **any** `blockedBy` relation is not in `Done`.
 4. If the human specified a ticket by ID, use that one — still validate blockers.
 5. If this session was launched by the orchestrator (`orchestrator.md`), the
-   ticket is already selected — skip steps 1–3 above and go straight to §1.2.
-   Steps 1–4 apply when this file is invoked directly (manual/interactive runs
-   with no orchestrator involved).
+   ticket is already selected and its §0 sweeps already covered step 0 — skip
+   steps 0–3 above and go straight to §1.2. Steps 0–4 apply when this file is
+   invoked directly (manual/interactive runs with no orchestrator involved),
+   where nothing else has done that reconciliation for you.
 
 ### 1.2 Read before you code
 
@@ -160,7 +165,8 @@ the merge is the human's call regardless (§1.5).
 
 - Open a PR. Never self-merge.
 - Move the Linear ticket to **In Review** (see the git-flow skill).
-- End the session. The next session picks up the next ticket.
+- End the session. The next session starts at §4.1: if a review landed on this PR
+  in the meantime, answering it comes before picking up the next ticket.
 
 ---
 
@@ -202,9 +208,37 @@ Other conventions:
 
 ---
 
-## 4. Linear reads — the exact calls
+## 4. Session-start reads — the exact calls
 
-Every session starts with these MCP calls against the `dmitry` team:
+### 4.1 GitHub first — is something already in flight?
+
+**Run these before the Linear reads below.** An open PR of yours with an
+unanswered review comment is work, and it outranks anything in `Todo` or
+`Backlog` (`orchestrator.md` §2.0). Skipping this is how a review comment sits
+unread while a session opens a branch for an unrelated ticket.
+
+```bash
+gh pr list --state open                                  # any PR of yours still open?
+gh pr view <n> --json headRefName,reviewDecision,statusCheckRollup
+gh api repos/JoseMiguez98/retro64V2/pulls/<n>/reviews    # review verdicts + bodies
+gh api repos/JoseMiguez98/retro64V2/pulls/<n>/comments   # inline threads (file + line)
+gh api repos/JoseMiguez98/retro64V2/issues/<n>/comments  # PR-level discussion
+```
+
+`gh pr list` alone does not answer the question — it says the PR is open, not
+whether anyone asked you something in it. A thread counts as **unanswered** when
+its newest comment is from a human with no `🤖 Orchestrator:` reply after it, and
+a review counts as unanswered when nothing was pushed to the branch since it was
+submitted. Red `statusCheckRollup` is a failed verification (§1.4.5), not a
+finished PR either.
+
+If anything here needs attention → handle it per `orchestrator.md` §4.4 (check
+out the same branch, fix, re-verify per §1.4, push, reply to each thread) and do
+**not** pick up a new ticket in this session.
+
+### 4.2 Linear reads
+
+Then these MCP calls against the `dmitry` team:
 
 ```
 # One call per in-scope project, in orchestrator.md §2.1's order — not one
@@ -213,6 +247,8 @@ list_issues { team: "dmitry", project: "Agent Orchestrator", state: "Todo", orde
 list_issues { team: "dmitry", project: "Retro64", state: "Todo", orderBy: priority }  # only per §2.1
 get_issue  { id: "DMI-XX", includeRelations: true }   # for the candidate
 get_issue  { id: "<each blockedBy id>" }              # verify blockers are Done
+list_comments { issueId: "DMI-XX" }                   # a new AC often arrives as a comment,
+                                                      # not as an edit to the description
 ```
 
 If you can't reach Linear, **stop** — don't guess ticket state.
@@ -229,6 +265,9 @@ If you can't reach Linear, **stop** — don't guess ticket state.
 - ❌ Push to `main` directly. Ever.
 - ❌ Open a PR whose verification (§1.4) is failing, skipped, or was weakened to pass.
 - ❌ Claim a feature works on the strength of your own reading of the diff. Run it.
+- ❌ Start a new ticket while a PR of yours has unanswered review feedback or a red CI run (§4.1).
+- ❌ Open a second PR for a ticket that already has one — push to the existing branch.
+- ❌ Resolve a human's review thread on their behalf, or close a PR because you disagree with the feedback.
 
 ---
 

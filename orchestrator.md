@@ -29,17 +29,62 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
 ## 0. Bootstrap checks (every run, before anything else)
 
 - [ ] **No local state file.** Each Routine run gets a fresh clone — nothing
-  written to disk in a prior run exists now. Instead, re-derive whether you're
-  mid-escalation by checking the ticket(s) currently in `Todo` for a Linear
-  comment from you (`🤖 Orchestrator:`) that hasn't been followed by a human
-  reply or a state change since. If found, go straight to **§4.3
-  Resume-after-wait** — do not pick a new ticket or re-post the question.
+  written to disk in a prior run exists now. Linear **and GitHub** are the state,
+  so "is something already in flight?" is a live read every run, never a memory.
+  Run the three sweeps below **before** any Todo or Backlog scan: **work already
+  in flight outranks work not yet started** (§2.0). Each sweep that fires sends
+  you somewhere specific and ends the bootstrap — don't continue down the list
+  looking for a new ticket.
+- [ ] **Sweep A — open PRs: unanswered review feedback is work.** A PR you opened
+  is not finished when it's green; it's finished when it's merged or closed.
+  `gh pr list --state open`, then for each PR whose head branch is one of yours
+  (`feature/DMI-*`):
+
+  ```bash
+  gh pr view <n> --json title,headRefName,reviewDecision,statusCheckRollup
+  gh api repos/JoseMiguez98/retro64V2/pulls/<n>/reviews    # review verdicts + bodies
+  gh api repos/JoseMiguez98/retro64V2/pulls/<n>/comments   # inline threads (file + line)
+  gh api repos/JoseMiguez98/retro64V2/issues/<n>/comments  # PR-level discussion
+  ```
+
+  The PR needs attention this run if **any** of these hold:
+  - a review is `CHANGES_REQUESTED`, or `COMMENTED` with substantive content, and
+    no commit has been pushed to the branch since it was submitted;
+  - an inline thread's newest comment is from a human with no `🤖 Orchestrator:`
+    reply after it (an explicitly resolved thread doesn't count);
+  - a PR-level comment from a human is newer than your last comment there
+    (ignore bot linkbacks — `linear-code` and friends);
+  - `statusCheckRollup` is red — that's a failed verification (§4.2), not a
+    finished PR.
+
+  If so → **§4.4**, and scan neither Todo nor Backlog this run.
+  `gh pr list` on its own is not this check: an open PR with green CI and an
+  unread question on one line looks exactly like a finished one, and that's how a
+  run ends up starting a Backlog ticket while the human waits for a reply.
+- [ ] **Sweep B — in-scope tickets already past `Todo`.** `list_issues` per §2.1's
+  projects for `In Progress` and `In Review`, and reconcile each against GitHub:
+  - `In Progress` with **no open PR** → a prior run was interrupted mid-ticket.
+    Look for its branch (`git branch -a --list '*DMI-<n>*'`) and its commits
+    before doing anything else; resume that ticket (§4.2) rather than starting a
+    new one. Never discard an interrupted run's commits to "clean up" — read the
+    diff first (§6 / §0's `git status` check below).
+  - `In Review` with an open PR → Sweep A already covers the PR side; also check
+    the *ticket's* comments for a human reply after yours (a new or amended
+    acceptance criterion arrives as a Linear comment far more often than as a
+    ticket edit). If there is one → §4.4, treating the ticket comment as the
+    review feedback.
+- [ ] **Sweep C — pending escalation.** Re-derive whether you're mid-escalation by
+  checking the ticket(s) currently in `Todo` for a Linear comment from you
+  (`🤖 Orchestrator:`) that hasn't been followed by a human reply or a state
+  change since. If found, go straight to **§4.3 Resume-after-wait** — do not pick
+  a new ticket or re-post the question.
 - [ ] Confirm `.claude/settings.json` → `permissions.allow` includes: `pnpm typecheck`,
   `pnpm test`, `pnpm test:e2e`, `pnpm lint`, `pnpm build`, `pnpm exec playwright *`
   (the verification gate, §4.2 / `AGENTS.md` §1.4), `git *`, `gh pr create`,
-  `gh pr view`, `gh pr list`, `scripts/notify.sh *` (the escalation notifier, §6).
-  If any are missing, add them (self-serve, no escalation needed — this is infra,
-  not a product decision) and log the change.
+  `gh pr view`, `gh pr list`, `gh pr diff`, `gh pr comment`, `gh api repos/*`
+  (Sweep A's review-thread reads and §4.4's replies), `scripts/notify.sh *` (the
+  escalation notifier, §6). If any are missing, add them (self-serve, no
+  escalation needed — this is infra, not a product decision) and log the change.
 - [ ] Playwright browsers present. `pnpm --filter @retro64/e2e install:browsers`
   is idempotent and cheap when already installed — a fresh Routine clone won't
   have them, and without them every verification fails for infrastructure
@@ -54,6 +99,21 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
 ## 1. Decision tree (high level)
 
 ```
+                    ┌────────────────────────────────────────┐
+                    │  §0 sweeps — work already in flight?   │
+                    │  open PR w/ review feedback or red CI  │
+                    │  · In Progress w/o PR · In Review w/   │
+                    │  a new human comment                   │
+                    └────────────┬───────────────────────────┘
+                          yes │       │ no
+                              ▼       │
+                    Answer (§4.4) or  │
+                    resume (§4.2) it. │
+                    Same branch, same │
+                    PR. Report & exit │
+                    — no new ticket   │
+                    this run.         │
+                                      ▼
                     ┌──────────────────────────────┐
                     │  Any in-scope ticket (§2.1)  │
                     │  in "Todo"?                  │
@@ -90,6 +150,23 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
 ---
 
 ## 2. Selecting the active ticket ("Todo" path)
+
+### 2.0 Precedence — finish before you start
+
+Two orderings apply, in this order:
+
+1. **In-flight work beats new work**, regardless of project or `priority`. A PR of
+   yours with unanswered review feedback, a red CI run, an `In Progress` ticket
+   whose run was interrupted, or an `In Review` ticket with a new human comment is
+   the work for this run (§0 Sweeps A/B → §4.4). Only when all three sweeps come
+   back empty does ticket selection below even run.
+2. **Then** §2.1's project allow-list and order, and only then the `priority`
+   field.
+
+The reason precedence 1 exists at all: a review comment is the human's half of
+this loop. If a run can walk past one and open a branch for an unrelated Backlog
+ticket, the human's feedback is strictly slower than their silence would be — and
+the PR count grows while nothing closes.
 
 ### 2.1 Working scope — which projects are in play
 
@@ -271,7 +348,47 @@ This run doesn't have to wait for the next scheduled trigger to notice a reply.
 Wire a Linear webhook (`resourceTypes: ["Comment"]`, filtered to the `dmitry`
 team) to POST to this routine's API-trigger endpoint. A reply to the escalation
 comment then starts a fresh run within seconds instead of waiting for the next
-cron tick.
+cron tick. Point a GitHub webhook
+(`pull_request_review`, `pull_request_review_comment`, `issue_comment`) at the
+same endpoint for the same reason — Sweep A shouldn't have to wait a cron tick to
+see a review that was left thirty seconds ago.
+
+### 4.4 Review feedback on an open PR (§0 Sweep A/B)
+
+This is a **full session's work**, not a postscript to the ticket that opened the
+PR. One PR per run, same as one ticket per run.
+
+1. **Read all of it before changing anything.** Every unanswered inline thread,
+   review body, and PR-level comment — plus the ticket's own comments if Sweep B
+   pointed here. Two comments often describe one underlying gap; answering them
+   one at a time produces two half-fixes.
+2. **Check out the existing branch — never open a second PR.** `git fetch`,
+   `git checkout <headRefName>`, rebase on `main` only if it's behind and the
+   rebase is clean (§5). The PR stays the same PR (§8).
+3. **Classify each comment before answering it:**
+   - *A concrete change request you can implement* → implement it.
+   - *A question* → answer it in a reply. If the answer is "yes, and the doc/code
+     should say so", the reply is not enough on its own — change the thing too.
+   - *A change that widens the ticket's scope*, contradicts an accepted AC, or
+     needs a product/architecture decision no `docs/decisions/` file makes →
+     don't guess. Either keep it out of this PR and file a follow-up ticket
+     (`save_issue`, linked to the original), or escalate (§6) if the PR can't be
+     resolved without it. Say which you did, in the reply.
+   - *Already true / already handled* → reply with where, and leave the code alone.
+4. **Verify again — the same gate, not a lighter one.** `AGENTS.md` §1.4 in full,
+   including the 3-attempt budget and CI (§4.2). A docs-only follow-up is still
+   docs-only (§1.4.2's last row), but a code change reopens the runtime tier.
+5. **Push to the same branch**, then reply to each thread with what changed and
+   the commit — `gh pr comment <n>` for PR-level, or
+   `gh api repos/JoseMiguez98/retro64V2/pulls/<n>/comments/<comment_id>/replies
+   -f body='🤖 Orchestrator: …'` to answer an inline thread in place, so the
+   answer sits where the question was asked. Prefix replies `🤖 Orchestrator:`
+   — that prefix is what Sweep A uses to tell an answered thread from an open
+   one, so a reply without it re-fires the sweep next run.
+6. **Never merge, never resolve a human's thread on their behalf, and never
+   close the PR** because you disagree with the feedback. Leave the PR in
+   `In Review` and report (§7) which threads you answered and which you escalated
+   or deferred to a follow-up ticket.
 
 ---
 
@@ -290,6 +407,8 @@ cron tick.
 - Rebasing your own feature branch on `main` when there's no conflict
 - A verification failure you can actually diagnose and fix, within the 3-attempt
   budget in `AGENTS.md` §1.4.4
+- Implementing and replying to PR review feedback that stays inside the ticket's
+  accepted scope (§4.4) — that's the loop working, not a decision to defer
 
 **Always escalate — stop and ask (§6):**
 - Merging any PR, yours or someone else's
@@ -310,6 +429,9 @@ cron tick.
 - Anything touching deploy config, secrets, or external service credentials
 - A ticket whose `blockedBy` graph looks inconsistent with its description
   (e.g. description references an issue ID that Linear's relations don't confirm)
+- Review feedback (§4.4) that only makes sense as a scope change, contradicts an
+  accepted acceptance criterion, or needs a decision no `docs/decisions/` file
+  makes — file a follow-up or escalate; never silently widen the PR to satisfy it
 
 ---
 
@@ -361,6 +483,11 @@ Every run — successful, blocked, or idle — ends with:
   ticket was consumed as substrate (§2.1 case 2) — both ticket IDs and which
   one was actually in flight. A silent skip is indistinguishable from an
   overlooked ticket; this line is what makes the difference visible.
+- **What the §0 sweeps found**, even when the answer is "nothing": open PRs
+  checked and why each was considered answered, plus — after a §4.4 run — which
+  threads were addressed, which were deferred to a follow-up ticket (with its ID),
+  and which were escalated. Same reasoning as the line above: "no PR needed
+  attention" and "I never looked" have to be distinguishable in the output.
 - Nothing left uncommitted in the working tree, and no dangling local branches
   from a run that didn't produce a PR. (This matters less under Routines, where
   each run gets a fresh clone anyway, but still applies to manual/local runs.)
@@ -375,6 +502,11 @@ below has to be a live read, not a cached flag.
 
 - Never post the same question twice — before posting, check existing comments
   on the ticket for a prior `🤖 Orchestrator:` message with no reply since.
-- Never open a second PR for a ticket that already has one open.
+- Never open a second PR for a ticket that already has one open. §4.4 pushes to
+  the existing branch; a "cleaner" second PR for the same ticket is a bug.
 - Never re-propose a Backlog candidate that already has a pending, unreplied
   `🤖 Orchestrator:` comment.
+- Never answer the same review thread twice. A thread already ending in a
+  `🤖 Orchestrator:` reply is answered until a human adds to it — which is why
+  §4.4 step 5 requires the prefix on every reply, and why a *silent* fix (push,
+  no reply) makes the sweep re-fire on the same comment every run.
