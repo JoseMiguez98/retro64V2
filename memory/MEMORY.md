@@ -11,6 +11,41 @@ already records (code, git history, `docs/decisions/`, the ticket). Newest first
 
 ---
 
+## Asserting a time-based criterion: parameterise the clock, and always test "and not before" (2026-07-30)
+
+**Context:** DMI-20's third AC is "automatic expiration of inactive rooms (define
+TTL)". The product TTL is 15 minutes, which no test can wait out.
+
+**1. Shorten the clock, never the behaviour.** The TTL comes from
+`ROOM_TTL_MS` (default `DEFAULT_ROOM_TTL_MS`), and `packages/e2e`'s
+`playwright.config.ts` passes a 2s value to the signaling `webServer`. Same
+reaper, same code path, same room freed — only the duration differs. That is a
+legitimate substitution; skipping the test or asserting the constant would not be.
+
+**2. Have the test read the effective value back from the server, not hardcode
+it.** `GET /health` reports `roomTtlMs` and `roomSweepIntervalMs`, and the spec
+derives its wait from those. Hardcoding `2000` in both the config and the spec
+creates two sources of truth that silently diverge the day someone retunes one.
+
+**3. `reuseExistingServer: !process.env.CI` will hand you the wrong server.** A
+signaling process left running from `pnpm dev` has the *default* 15-minute TTL, so
+the expiry spec would sit there measuring nothing. The spec asserts
+`roomTtlMs <= 10s` with a message saying to restart the server. Failing loudly on
+a misconfigured environment is right; `test.skip` would hide a broken harness
+behind a green run.
+
+**4. An expiry test that only asserts "it's gone" is half a test.** It passes
+identically against a server that destroys the resource the instant it empties —
+a real bug here, since a peer that reloads must be able to rejoin the code it
+already shared. So the spec runs the *same* sequence twice, and the only
+difference between the two halves is the wait: claim the code immediately →
+succeeds; claim it after the TTL → `not-found`.
+
+**5. Define "inactive" before you implement a TTL.** Here it means *holds no
+peers*, not *no traffic*. A room with one connected peer waiting for a friend to
+type the code is doing its job, and a silence timer would evict the primary flow.
+The leak actually worth reaping is a code created, shared, and abandoned.
+
 ## Verifying a device API in Playwright: fake the device, and let a browser project prove "works in X" (2026-07-30)
 
 **Context:** DMI-18 (gamepad detection + keyboard fallback). Two things cost time

@@ -71,6 +71,18 @@ export default defineConfig({
       timeout: 60_000,
       stdout: "pipe",
       stderr: "pipe",
+      env: {
+        // DMI-20's third criterion is that inactive rooms expire on a TTL. The
+        // product default is 15 minutes (`DEFAULT_ROOM_TTL_MS`), which no test
+        // can wait out, so the clock is shortened here and the spec reads the
+        // effective value back from `GET /health` rather than hardcoding it.
+        //
+        // This parameterises *time*, not the behaviour: the same reaper, on the
+        // same code path, frees the same room. What it does not prove is that
+        // 15 minutes elapse correctly — that's the platform's timer, not ours.
+        ROOM_TTL_MS: "2000",
+        ROOM_SWEEP_INTERVAL_MS: "250",
+      },
     },
     {
       command: "pnpm --filter @retro64/web dev",
