@@ -1,7 +1,9 @@
 # Orchestrator Protocol
 
 This document defines the **decision flow** a Claude Code session must follow when
-launched unattended (as a routine/cron job) against the `dmitry` team in Linear.
+running against the `dmitry` team in Linear, regardless of what invoked this
+session — a supervised local run, a scheduled trigger, or anything else. The
+rules below hold in every mode.
 That team holds several projects and they are not interchangeable — **§2.1 is the
 allow-list and the priority order between them**, and no step below may widen it.
 
@@ -15,11 +17,14 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
   at §4.2, once a ticket is greenlit to execute.
 - `git-flow` skill — branch/commit/PR mechanics. Self-triggers when relevant.
 - `design.md` — design-system/UI reference only, **not** system architecture.
-  For architecture questions, the source of truth is `docs/decisions/DMI-X-*.md`
-  and the linked ticket. The DMI-1–DMI-6 architecture decisions are **all
-  settled** (DMI-2 P2P transport and DMI-3 emulation engine included — see their
-  `docs/decisions/` files, both marked *Decided*). Still, don't assume: check the
-  relevant `docs/decisions/DMI-X-*.md` and its ticket before relying on it.
+  For architecture questions, the source of truth is the **decision record** plus
+  the linked ticket. Decision records live in two places: `docs/decisions/DMI-X-*.md`
+  for decisions made up to now (historical — DMI-1–DMI-6, DMI-73), and a **Linear
+  decision document** (linked from the deciding ticket by a comment) for anything
+  decided from now on (DMI-91). Check both, plus the ticket, before relying on a
+  decision. The DMI-1–DMI-6 architecture decisions are **all settled** (DMI-2 P2P
+  transport and DMI-3 emulation engine included). Still, don't assume: read the
+  record before building on it.
 
 *(Setup note, not needed per-session: this file is wired into every session via
 `@orchestrator.md` in the repo's root `CLAUDE.md`.)*
@@ -28,10 +33,8 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
 
 ## 0. Bootstrap checks (every run, before anything else)
 
-- [ ] **No local state file.** Each Routine run gets a fresh clone — nothing
-  written to disk in a prior run exists now. Linear **and GitHub** are the state,
-  so "is something already in flight?" is a live read every run, never a memory.
-  Run the three sweeps below **before** any Todo or Backlog scan: **work already
+- - [ ] **No local state file.** Each run starts clean, with no memory of any
+  prior run — so nothing written to disk in a prior run exists now.  Run the three sweeps below **before** any Todo or Backlog scan: **work already
   in flight outranks work not yet started** (§2.0). Each sweep that fires sends
   you somewhere specific and ends the bootstrap — don't continue down the list
   looking for a new ticket.
@@ -86,9 +89,9 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
   escalation notifier, §6). If any are missing, add them (self-serve, no
   escalation needed — this is infra, not a product decision) and log the change.
 - [ ] Playwright browsers present. `pnpm --filter @retro64/e2e install:browsers`
-  is idempotent and cheap when already installed — a fresh Routine clone won't
-  have them, and without them every verification fails for infrastructure
-  reasons rather than product ones.
+  is idempotent and cheap when already installed — a fresh checkout won't have
+  them, and without them every verification fails for infrastructure reasons
+  rather than product ones.
 - [ ] `git status` — working tree must be clean and on `main` (or wherever the
   protocol starts from) before touching anything. If dirty from a previous
   interrupted run, see §6 (autonomy boundaries) before deciding whether to
@@ -128,8 +131,13 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
                               │       │
                               │      yes
                               │       ▼
-                              │   Notify user, ask for go-ahead (§3.3)
-                              │   Set state = waiting_for_human. Exit.
+                              │   Ready to work (§3.3)? ──no──▶ Escalate
+                              │       │                          to user (§5)
+                              │      yes
+                              │       ▼
+                              │   Move ticket to "Todo", notify user
+                              │   it was picked up and why — do
+                              │   **not** wait for a go-ahead.
                               ▼
                     ┌─────────────────────────┐
                     │  Pre-flight check (§4)  │
@@ -177,7 +185,6 @@ the team-wide priority sort returns first". `team = dmitry` alone is not a scope
 |---|---|---|
 | **Agent Orchestrator** | Yes — **primary queue** | The actual deliverable: this protocol, the trigger layer, state reconciliation, the verification gate. Scanned first, always. |
 | **Retro64** | Yes, but **on demand only** (see below) | The substrate the loop is exercised against. Real feature work is what proves the loop does something; it is not the goal. |
-| **Monopoly Online** | **No** | Out of scope for autonomous pickup. It holds ~30 Backlog tickets, several `Urgent`/`High`, which a team-wide priority sort would pull ahead of everything here. Nobody has greenlit agentic work in it. |
 
 A **Retro64** ticket is in play only when one of these holds:
 
@@ -215,6 +222,10 @@ validation) — don't re-implement it here. What this file adds on top:
   different one.
 - Only one ticket in flight per session. Do not batch-start multiple tickets in a
   single session even if several are in Todo.
+- **A human moving a ticket to `Todo` overrides the phase gate** (§3.1) — an
+  explicit queue action is a deliberate choice, not an oversight. But say so in
+  the §7 report: name the ticket, its phase, and the current open phase, so an
+  out-of-phase pickup is visible rather than silent.
 
 ---
 
@@ -240,11 +251,26 @@ A Backlog ticket is a **workable candidate** only if ALL of the following hold:
   human spec work first, not agentic pickup
 - Not explicitly labeled `blocked`, `needs-design`, or `on-hold` (or equivalent
   label conventions in the workspace)
+- **It belongs to the current open phase.** Work is organized into phase epics
+(Phase 0 → 1 → 2 → 3). The **current phase** is the lowest-numbered phase epic
+that is not `Done`. A Backlog ticket is a candidate only if it is a child of
+that epic. A ticket under a **later** phase epic is never a candidate — no
+matter how ready it looks, how high its `priority`, or how clear its AC.
+Phases close in order, and starting Phase N+1 work before Phase N's exit
+criteria are met is exactly what this rule exists to prevent. If the current
+phase has no workable children left, do **not** advance to the next phase on
+your own: report it (§7) and escalate (§6) that the phase looks ready to close.
+- **It has a phase epic as its parent.** An unparented Backlog ticket has no
+phase, so it cannot be checked against the rule above — it is not a candidate.
+Report it (§7) so it gets parented, rather than picking it up.
 
 ### 3.2 Ranking
 
 If multiple candidates qualify, prefer, in order:
-0. **Project order per §2.1** — this dominates everything below. Ranking rules
+0. **Phase first, then project order per §2.1.** The phase gate in §3.1 has
+   already excluded anything outside the current phase — it is a filter, not a
+   tie-breaker, and nothing below can promote a later-phase ticket. Within the
+   current phase, §2.1's project order dominates everything below. Ranking rules
    1–3 break ties *within* a project; they never promote a Retro64 candidate over
    an Agent Orchestrator one.
 1. Ticket explicitly flagged as low-dependency in past notes (e.g. DMI-8, DMI-18
@@ -256,23 +282,25 @@ If multiple candidates qualify, prefer, in order:
 
 Pick **one** candidate. Do not propose a batch.
 
-### 3.3 Notify & pause — do NOT self-start a Backlog ticket
+### 3.3 Ready check & self-start — notify, don't wait for approval
 
-Even if a candidate is found and looks completely unblocked, the orchestrator
-**never** promotes a ticket from Backlog → Todo on its own. Instead:
+If a candidate is found, the orchestrator checks it's actually **ready to
+work**: `blockedBy` clear, acceptance criteria present and concrete (no
+placeholders — see §4.4), no open product/architecture question it depends on
+(§4.5/§5 govern that case). If ready, it self-promotes:
 
-1. Post a comment on the candidate ticket in Linear:
-   > 🤖 Orchestrator: This ticket looks unblocked and ready (`blockedBy` clear,
-   > AC present). Move to **Todo** if you want me to start it on the next run,
-   > or reply here if you want changes to the spec first.
-2. End the session. Do not attempt any other work this run. Nothing else needs
-   to be recorded — the comment itself *is* the state (see §0: no local file
-   survives between runs, so Linear has to be authoritative anyway).
+1. Move the ticket **Backlog → Todo**.
+2. Post a comment on the ticket in Linear:
+   > 🤖 Orchestrator: Picked this up from Backlog — looked ready (`blockedBy`
+   > clear, AC present). Starting now.
+3. Continue straight into the pre-flight check (§4) and execution (§4.2) in
+   the **same run** — do not exit and wait for a reply.
 
-On the **next** run, §0 bootstrap checks the same Linear ticket: has it moved to
-Todo, or is there a reply comment after your `🤖 Orchestrator:` one? If yes to
-either, proceed normally (§2 or re-evaluate the reply). If neither, exit again
-without re-posting the question.
+If it is **not** ready — `blockedBy` open, AC missing/placeholder, or it needs
+a decision this ticket doesn't own — do not self-start it. Escalate per §5
+instead: say what's missing and, per `AGENTS.md` §1.2, bring a formed position
+sized to the gap (investigate-and-decide, spawn a discovery ticket, or flag the
+blocking ticket) rather than just asking to proceed.
 
 ---
 
@@ -297,6 +325,13 @@ Hand off to the `AGENTS.md` session-per-ticket protocol as normal:
 branch → implement → **verify (`AGENTS.md` §1.4)** → commit → `gh pr create`
 (never merge) → comment on the Linear ticket linking the PR → move ticket status
 to `In Review`.
+
+For a ticket with a **deploy target**, the loop additionally deploys the branch
+to a PR **preview** and runs the e2e suite against that preview before the change
+is put up for approval — wired in DMI-89; the mechanics live there, and a red
+preview run is a failed verification like any other (§4.2 / `AGENTS.md` §1.4.5).
+Decision / discovery tickets are the exception to this whole flow — they produce
+no PR; see §4.5.
 
 The verify step is a **gate, not a formality** (DMI-73). `pnpm typecheck` +
 `pnpm build` (per-package via `pnpm --filter @retro64/<pkg> <script>` if the
@@ -326,13 +361,18 @@ Two consequences the orchestrator owns:
   trigger, and none of which will exist in DMI-76's service either. See
   [`docs/decisions/DMI-73-verification-loop.md`](./docs/decisions/DMI-73-verification-loop.md).
 
-Model selection: Sonnet (default) for this implementation work. Only escalate to
-Opus if the ticket turns out to require an architecture-level decision not yet
-settled — check `docs/decisions/` and the relevant DMI-X ticket first. The
-DMI-1–DMI-6 decisions (DMI-2 P2P transport and DMI-3 emulation engine included)
-are all settled, so build on them per their `docs/decisions/` files; a genuine
-escalation is only a ticket that needs a decision *not* yet captured there.
-`design.md` covers design-system/UI only, not architecture.
+Model selection: Sonnet (default) for implementation work; **Opus for decision /
+discovery tickets** (§4.5) and architecture calls. Escalate to Fable
+(`claude-fable-5-1`) only when a decision / discovery ticket is genuinely
+heavy — deep, multi-source research or a decision with wide, hard-to-reverse
+blast radius — not as the default for every discovery ticket. Escalate to a
+human only when a ticket *depends on* an architecture decision that is not yet
+made anywhere — check both the `docs/decisions/*.md` records and any Linear
+decision document (§4.5), plus the relevant DMI-X ticket, first. The
+DMI-1–DMI-6 decisions are all settled, so build on them; a genuine escalation
+is only a ticket **blocked on** a decision no record makes — **not** a
+decision ticket that is itself scoped to make one (§4.5). `design.md` covers
+design-system/UI only, not architecture.
 
 ### 4.3 Resume-after-wait
 
@@ -344,14 +384,14 @@ If §0 found a pending `🤖 Orchestrator:` comment with no reply yet:
 - If resolved → proceed from the appropriate step.
 - If still unresolved → exit immediately, no new action, no duplicate question.
 
-This run doesn't have to wait for the next scheduled trigger to notice a reply.
-Wire a Linear webhook (`resourceTypes: ["Comment"]`, filtered to the `dmitry`
-team) to POST to this routine's API-trigger endpoint. A reply to the escalation
-comment then starts a fresh run within seconds instead of waiting for the next
-cron tick. Point a GitHub webhook
-(`pull_request_review`, `pull_request_review_comment`, `issue_comment`) at the
-same endpoint for the same reason — Sweep A shouldn't have to wait a cron tick to
-see a review that was left thirty seconds ago.
+There is currently **no automatic wake-on-reply.** A reply to an escalation
+comment does nothing until the next run re-reads the ticket — under supervised
+runs, that's the next time you launch one. The webhook wake-up (a Linear
+`Comment` webhook, and a GitHub `pull_request_review` / `issue_comment` webhook
+POSTing to a trigger endpoint so a reply starts a run within seconds) is
+**deferred and built together with Routines** (DMI-90), not before. Until it
+exists, **never tell a human a reply will "auto-trigger" a run** — the only live
+resume path is the next run re-deriving state from Linear/GitHub.
 
 ### 4.4 Review feedback on an open PR (§0 Sweep A/B)
 
@@ -370,8 +410,8 @@ PR. One PR per run, same as one ticket per run.
    - *A question* → answer it in a reply. If the answer is "yes, and the doc/code
      should say so", the reply is not enough on its own — change the thing too.
    - *A change that widens the ticket's scope*, contradicts an accepted AC, or
-     needs a product/architecture decision no `docs/decisions/` file makes →
-     don't guess. Either keep it out of this PR and file a follow-up ticket
+     needs a product/architecture decision no decision record makes (neither a
+     `docs/decisions/*.md` file nor a Linear decision document) → don't guess. Either keep it out of this PR and file a follow-up ticket
      (`save_issue`, linked to the original), or escalate (§6) if the PR can't be
      resolved without it. Say which you did, in the reply.
    - *Already true / already handled* → reply with where, and leave the code alone.
@@ -390,6 +430,35 @@ PR. One PR per run, same as one ticket per run.
    `In Review` and report (§7) which threads you answered and which you escalated
    or deferred to a follow-up ticket.
 
+### 4.5 Decision / discovery tickets
+
+Some tickets exist to **make a decision**, not to ship code — a stack choice, a
+deploy target, a testing strategy. They're routed to Opus (§4.2) and worked like
+this:
+
+1. **You are authorized to make the decision this ticket is scoped for.** Do the
+   discovery, weigh the trade-offs, and decide. This is *not* the "escalate an
+   unmade architecture decision" case in §5 — that rule is for a decision some
+   *other* ticket depends on and nobody has made. A ticket whose own job is to
+   decide is yours to resolve. Escalate only the parts that genuinely need a
+   human: account creation, credentials, OAuth, secrets, or provisioning you
+   cannot do without them.
+2. **Record the decision as a Linear document, not a repo file.** Create a Linear
+   document capturing the options, the decision, the rationale, and any settled
+   decision it supersedes (with the new information that justifies reopening it).
+   Do **not** write a new `docs/decisions/*.md` — that convention is retired for
+   new decisions (DMI-91); the existing files stay only as historical record.
+3. **Link it from the ticket by a comment** (`🤖 Orchestrator:` prefix). That
+   comment plus the document is the source of truth the implementation ticket
+   reads.
+4. **End state: move the ticket to `In Review`.** A decision ticket produces
+   **no repo PR** — its deliverable is the Linear document. Because of that, §0
+   Sweep B must not read its no-PR state as an interrupted run (DMI-85); the
+   linked decision-doc comment is the signal that it is complete-pending-review.
+5. Do not start the implementation the decision unblocks in the same run — that
+   is a separate ticket, and the human approves the decision first (by moving the
+   ticket on or replying).
+
 ---
 
 ## 5. Autonomy boundaries — decide alone vs. escalate
@@ -399,9 +468,9 @@ PR. One PR per run, same as one ticket per run.
 - Missing bash permission entries required by the existing protocol (add to
   `settings.json`, this is infra not product scope)
 - Minor spec ambiguity fully resolvable by reading `design.md` (design-system/UI),
-  a settled decision under `docs/decisions/` (the DMI-1–DMI-6 range, DMI-2 and
-  DMI-3 included, is all captured there), or existing code conventions elsewhere
-  in the repo — but never by inventing a decision no `docs/decisions/` file makes
+  a settled decision record (a `docs/decisions/*.md` file or a Linear decision
+  document), or existing code conventions elsewhere in the repo — but never by
+  inventing a decision no record makes
 - Standard dependency/install issues (`pnpm install`, lockfile drift, missing
   Playwright browsers — just install them)
 - Rebasing your own feature branch on `main` when there's no conflict
@@ -416,10 +485,16 @@ PR. One PR per run, same as one ticket per run.
 - Ambiguous or missing acceptance criteria that would require guessing product
   behavior
 - Anything requiring a force-push or rewriting shared branch history
-- Scope that implies an architecture decision **not** captured in
-  `docs/decisions/`. The DMI-1–DMI-6 decisions (DMI-2 P2P transport and DMI-3
-  emulation engine included) are settled and safe to build on; escalate only when
-  a ticket needs a decision no `docs/decisions/` file actually makes
+- Scope that **depends on** an architecture decision **not** captured in any
+  decision record (a `docs/decisions/*.md` file or a Linear decision document).
+  **Never just stop and ask — bring a formed position, sized to the decision**
+  (`AGENTS.md` §1.2): if inline investigation settles it, research, decide, and
+  escalate the decision + why for confirmation; if it merits its own discovery,
+  spawn a `Discovery` ticket and escalate its link for approval; if a specific
+  other ticket owns the decision, mark this one blocked by it. **Exception:** a
+  decision / discovery ticket whose own job is to make that decision is yours to
+  resolve and approve, not escalate (§4.5). The DMI-1–DMI-6 decisions are settled
+  and safe to build on.
 - A verification (`AGENTS.md` §1.4) still failing after 3 fix attempts — escalate
   with the failing output; never open the PR anyway, and never weaken the test
   to get past the gate
@@ -494,11 +569,13 @@ Every run — successful, blocked, or idle — ends with:
 
 ---
 
-## 8. Idempotency (this runs unattended, repeatedly)
+## 8. Idempotency (runs repeat, and must not stack)
 
-Under Routines, every run starts from a clean clone — there is no local memory
-of prior runs. Linear and GitHub are the **only** sources of truth; every check
-below has to be a live read, not a cached flag.
+Every run must assume it has no memory of prior runs — under supervised local
+runs you re-launch from a clean state, and under Routines (the interim trigger
+once the loop is stable — DMI-90) each run starts from a fresh clone. Either way,
+Linear and GitHub are the **only** sources of truth; every check below has to be
+a live read, not a cached flag.
 
 - Never post the same question twice — before posting, check existing comments
   on the ticket for a prior `🤖 Orchestrator:` message with no reply since.
