@@ -65,17 +65,58 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
   unread question on one line looks exactly like a finished one, and that's how a
   run ends up starting a Backlog ticket while the human waits for a reply.
 - [ ] **Sweep B — in-scope tickets already past `Todo`.** `list_issues` per §2.1's
-  projects for `In Progress` and `In Review`, and reconcile each against GitHub:
-  - `In Progress` with **no open PR** → a prior run was interrupted mid-ticket.
-    Look for its branch (`git branch -a --list '*DMI-<n>*'`) and its commits
-    before doing anything else; resume that ticket (§4.2) rather than starting a
-    new one. Never discard an interrupted run's commits to "clean up" — read the
-    diff first (§6 / §0's `git status` check below).
-  - `In Review` with an open PR → Sweep A already covers the PR side; also check
-    the *ticket's* comments for a human reply after yours (a new or amended
-    acceptance criterion arrives as a Linear comment far more often than as a
-    ticket edit). If there is one → §4.4, treating the ticket comment as the
-    review feedback.
+  projects for `In Progress` and `In Review`, and reconcile each against GitHub.
+  "No open PR" alone is **not** evidence of an interrupted run — classify the
+  ticket first, in this order, and stop at the first case that matches:
+
+  1. **Decision / discovery ticket** (`Discovery` label, or its deliverable is a
+     decision document — §4.5). It has no PR by design, so never search for a
+     branch. Look for a `🤖 Orchestrator:` comment linking a Linear decision
+     document:
+     - present, no human comment after it → complete-pending-review. Nothing to
+       do; name it in the §7 report.
+     - present, with a human comment after it → §4.4, treating that comment as the
+       review feedback on the decision document.
+     - absent → the discovery was interrupted; resume it per §4.5.
+  2. **Orchestrator ticket worked through a substrate** (§2.1 case 2). Its PR and
+     branch are named after the *substrate* ticket, so a branch search on its own
+     ID is expected to return nothing and means nothing. Identify the substrate
+     from the ticket's `relatedTo` relation **and** the `🤖 Orchestrator:` comment
+     naming it — both should agree; if only one exists, or they disagree, that's
+     an inconsistent graph (§5) → escalate. Then run the rest of this sweep
+     against the **substrate's** PR and branch instead of this ticket's.
+  3. **Everything else** — look up the ticket's PR in *any* state, not just open,
+     matched on its branch (a bare `--search 'DMI-<n>'` also hits every PR whose
+     body merely mentions the ticket):
+
+     ```bash
+     gh pr list --state all --search 'DMI-<n> in:title' \
+       --json number,state,mergedAt,headRefName \
+       --jq '.[] | select(.headRefName | test("DMI-<n>-"))'
+     ```
+
+
+     - **open** → Sweep A covers the PR side; also run the `In Review` ticket-comment
+       check below.
+     - **merged** (or closed without merging) and the ticket is `In Progress` → a
+       human reopened finished work. If a human comment on the ticket is newer
+       than the merge, **that comment is the instruction**: follow it (new branch
+       off `main`, new PR — the old one is not open, so §8's one-open-PR rule
+       holds). If there is no such comment, the reopen carries no recoverable
+       intent → escalate per §6 asking what's missing (or, if that question is
+       already posted and unanswered, exit per §4.3). Never invent the missing
+       work from the diff or from the timing of the state change.
+     - **no PR at all** and the ticket is `In Progress` → a prior run was
+       interrupted mid-ticket. Look for its branch
+       (`git branch -a --list '*DMI-<n>*'`) and its commits before doing anything
+       else; resume that ticket (§4.2) rather than starting a new one. Never
+       discard an interrupted run's commits to "clean up" — read the diff first
+       (§6 / §0's `git status` check below).
+
+  For every `In Review` ticket, whichever case above applied, also check the
+  *ticket's* comments for a human reply after yours (a new or amended acceptance
+  criterion arrives as a Linear comment far more often than as a ticket edit). If
+  there is one → §4.4, treating the ticket comment as the review feedback.
 - [ ] **Sweep C — pending escalation.** Re-derive whether you're mid-escalation by
   checking the ticket(s) currently in `Todo` for a Linear comment from you
   (`🤖 Orchestrator:`) that hasn't been followed by a human reply or a state
@@ -105,15 +146,24 @@ It sits **above** `AGENTS.md` (session-per-ticket implementation protocol) and t
                     ┌────────────────────────────────────────┐
                     │  §0 sweeps — work already in flight?   │
                     │  open PR w/ review feedback or red CI  │
-                    │  · In Progress w/o PR · In Review w/   │
-                    │  a new human comment                   │
+                    │  · In Progress / In Review ticket      │
+                    │  (Sweep B classifies it, below) · new  │
+                    │  human comment on an In Review ticket  │
                     └────────────┬───────────────────────────┘
                           yes │       │ no
                               ▼       │
-                    Answer (§4.4) or  │
-                    resume (§4.2) it. │
-                    Same branch, same │
-                    PR. Report & exit │
+          Sweep B: which kind of      │
+          in-flight ticket?           │
+            ├─ decision/discovery ──▶ doc linked, no reply: done, report
+            │                         doc linked + reply: §4.4 · no doc: §4.5
+            ├─ worked via substrate ─▶ re-run Sweep B on the substrate's
+            │   (§2.1 case 2)          PR/branch, not this ticket's ID
+            ├─ PR open ─────────────▶ §4.4 if feedback/red CI (Sweep A)
+            ├─ PR merged/closed ────▶ human comment after merge: follow it
+            │                         none: escalate "what's missing?" (§6)
+            └─ no PR at all ────────▶ interrupted run: resume branch (§4.2)
+                              │       │
+                    Report & exit     │
                     — no new ticket   │
                     this run.         │
                                       ▼
@@ -194,7 +244,10 @@ A **Retro64** ticket is in play only when one of these holds:
    cannot be proven against a docs-only ticket; it needs a real feature ticket to
    consume. Here the *orchestrator* ticket is the one in flight and the Retro64
    ticket is the material — that's still one ticket per session in §2.2's sense,
-   not a second parallel run. Report both at §7.
+   not a second parallel run. Report both at §7. Record the pairing where the
+   next run can find it: add a `relatedTo` relation from the orchestrator ticket
+   to the substrate, and post a `🤖 Orchestrator:` comment on the orchestrator
+   ticket naming the substrate — §0 Sweep B needs both to reconcile it.
 3. **The Agent Orchestrator queue is empty** — nothing in-scope in `Todo`, and no
    Backlog candidate that passes §3.1.
 
@@ -453,8 +506,8 @@ this:
    reads.
 4. **End state: move the ticket to `In Review`.** A decision ticket produces
    **no repo PR** — its deliverable is the Linear document. Because of that, §0
-   Sweep B must not read its no-PR state as an interrupted run (DMI-85); the
-   linked decision-doc comment is the signal that it is complete-pending-review.
+   Sweep B must not read its no-PR state as an interrupted run (Sweep B case 1);
+   the linked decision-doc comment is the signal that it is complete-pending-review.
 5. Do not start the implementation the decision unblocks in the same run — that
    is a separate ticket, and the human approves the decision first (by moving the
    ticket on or replying).
