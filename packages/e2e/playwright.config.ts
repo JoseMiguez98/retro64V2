@@ -1,4 +1,5 @@
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig, devices, type PlaywrightTestConfig } from "@playwright/test";
+import { SIGNALING_URL, WEB_URL, isRemoteSignaling, isRemoteWeb } from "./tests/support/targets";
 
 // E2E verification harness for the loop protocol (AGENTS.md §1.4).
 //
@@ -7,12 +8,50 @@ import { defineConfig, devices } from "@playwright/test";
 // browsers. Nothing here mocks the thing under test — a passing run means the
 // feature actually worked, not that an agent said it did.
 //
-// Ports are pinned rather than randomised because the signaling server's CORS
-// allowlist is `http://localhost:5173` (packages/signaling/src/server.ts), so
-// browser pages have to be served from exactly that origin.
+// Targets come from E2E_BASE_URL / E2E_SIGNALING_URL (tests/support/targets.ts).
+// A side pointed at a deployment is not booted locally. Local ports stay pinned
+// because the signaling server only accepts its CORS_ORIGIN, so each local
+// server is told the other side's origin explicitly below.
 
-const WEB_ORIGIN = "http://localhost:5173";
-const SIGNALING_ORIGIN = "http://localhost:3001";
+const webServer: NonNullable<PlaywrightTestConfig["webServer"]> = [];
+
+if (!isRemoteSignaling) {
+  webServer.push({
+    command: "pnpm --filter @retro64/signaling dev",
+    url: `${SIGNALING_URL}/health`,
+    cwd: "../..",
+    reuseExistingServer: !process.env.CI,
+    timeout: 60_000,
+    stdout: "pipe",
+    stderr: "pipe",
+    env: {
+      // DMI-20's third criterion is that inactive rooms expire on a TTL. The
+      // product default is 15 minutes (`DEFAULT_ROOM_TTL_MS`), which no test
+      // can wait out, so the clock is shortened here and the spec reads the
+      // effective value back from `GET /health` rather than hardcoding it.
+      //
+      // This parameterises *time*, not the behaviour: the same reaper, on the
+      // same code path, frees the same room. What it does not prove is that
+      // 15 minutes elapse correctly — that's the platform's timer, not ours.
+      ROOM_TTL_MS: "2000",
+      ROOM_SWEEP_INTERVAL_MS: "250",
+      CORS_ORIGIN: new URL(WEB_URL).origin,
+    },
+  });
+}
+
+if (!isRemoteWeb) {
+  webServer.push({
+    command: "pnpm --filter @retro64/web dev",
+    url: WEB_URL,
+    cwd: "../..",
+    reuseExistingServer: !process.env.CI,
+    timeout: 60_000,
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { VITE_SIGNALING_URL: SIGNALING_URL },
+  });
+}
 
 export default defineConfig({
   testDir: "./tests",
@@ -27,7 +66,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
 
   use: {
-    baseURL: WEB_ORIGIN,
+    baseURL: WEB_URL,
     trace: "retain-on-failure",
     video: "retain-on-failure",
   },
@@ -62,36 +101,5 @@ export default defineConfig({
     },
   ],
 
-  webServer: [
-    {
-      command: "pnpm --filter @retro64/signaling dev",
-      url: `${SIGNALING_ORIGIN}/health`,
-      cwd: "../..",
-      reuseExistingServer: !process.env.CI,
-      timeout: 60_000,
-      stdout: "pipe",
-      stderr: "pipe",
-      env: {
-        // DMI-20's third criterion is that inactive rooms expire on a TTL. The
-        // product default is 15 minutes (`DEFAULT_ROOM_TTL_MS`), which no test
-        // can wait out, so the clock is shortened here and the spec reads the
-        // effective value back from `GET /health` rather than hardcoding it.
-        //
-        // This parameterises *time*, not the behaviour: the same reaper, on the
-        // same code path, frees the same room. What it does not prove is that
-        // 15 minutes elapse correctly — that's the platform's timer, not ours.
-        ROOM_TTL_MS: "2000",
-        ROOM_SWEEP_INTERVAL_MS: "250",
-      },
-    },
-    {
-      command: "pnpm --filter @retro64/web dev",
-      url: WEB_ORIGIN,
-      cwd: "../..",
-      reuseExistingServer: !process.env.CI,
-      timeout: 60_000,
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  ],
+  webServer,
 });

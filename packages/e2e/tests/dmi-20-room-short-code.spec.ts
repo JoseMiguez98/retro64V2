@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { SIGNALING_URL, createRoom, createRoomCodes, createRoomPeer, roomState } from "./support/room-peer";
+import { createRoom, createRoomCodes, createRoomPeer, roomState } from "./support/room-peer";
+import { SIGNALING_URL } from "./support/targets";
 
 /**
  * DMI-20 — "Room creation and join with short code".
@@ -148,11 +149,12 @@ test.describe("DMI-20 short-code rooms", () => {
     const sweepMs: number = health.roomSweepIntervalMs;
     expect(typeof ttlMs, "GET /health must report roomTtlMs").toBe("number");
     // Not a skip: a long TTL means the harness is talking to a server that
-    // wasn't started for this suite (a stale `reuseExistingServer` process), and
-    // that is a broken environment to be fixed, not a criterion to wave through.
+    // wasn't started for this suite (a stale `reuseExistingServer` process, or a
+    // deployment without a short ROOM_TTL_MS), and that is a broken environment
+    // to be fixed, not a criterion to wave through.
     expect(
       ttlMs,
-      `roomTtlMs is ${ttlMs}ms — too long to assert. Restart the signaling server via the e2e webServer, which sets a short ROOM_TTL_MS.`,
+      `roomTtlMs is ${ttlMs}ms at ${SIGNALING_URL} — too long to assert. Locally, restart the signaling server via the e2e webServer; a deployed target must run with ROOM_TTL_MS <= 10000.`,
     ).toBeLessThanOrEqual(10_000);
 
     const hostA = await newPeer(await (await browser.newContext()).newPage());
