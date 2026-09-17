@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
+import { SIGNALING_URL } from "./targets";
 
 // UMD build of socket.io-client — exposes a global `io` once injected into the
 // page. Resolved by path rather than `require.resolve`, because the package's
@@ -7,8 +8,6 @@ import type { Page } from "@playwright/test";
 const SOCKET_IO_CLIENT_UMD = fileURLToPath(
   new URL("../../node_modules/socket.io-client/dist/socket.io.min.js", import.meta.url),
 );
-
-export const SIGNALING_URL = "http://localhost:3001";
 
 /**
  * State the in-page harness exposes back to the test. Kept flat and
